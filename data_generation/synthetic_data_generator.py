@@ -31,7 +31,8 @@ needle_holder_model_dir = os.path.join(models_dir, "needle_holder/")
 tweezers_model_dir = os.path.join(models_dir, "tweezers/")
 coco_dir = os.path.join(resources_dir, "train2017/")
 hdri_dir = os.path.join(resources_dir, "haven/hdris/")
-output_dir = "./output/"
+current_file_dir = os.path.dirname(os.path.abspath(__file__))
+output_dir = os.path.join(current_file_dir, "output/")
 os.makedirs(output_dir, exist_ok=True)
 
 
