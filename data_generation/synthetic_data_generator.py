@@ -47,7 +47,7 @@ hdri_dir = os.path.join(resources_dir, "haven/hdris/")
 current_file_dir = os.path.dirname(os.path.abspath(__file__))
 
 # Output directory for generated data
-output_dir = os.path.join(current_file_dir, "output/")
+output_dir = os.path.join(current_file_dir, "output_specific_back_2-30/")
 os.makedirs(output_dir, exist_ok=True)
 
 
@@ -217,8 +217,9 @@ def choose_background():
     - FileNotFoundError: If the chosen directory does not contain any images.
     """
     # Randomly choose and set a background (COCO or HDRI)
-    dir = random.choice([coco_dir, hdri_dir])
-    img_path = os.path.join(dir, random.choice(os.listdir(dir)))
+    # dir = random.choice([coco_dir, hdri_dir])
+    # img_path = os.path.join(dir, random.choice(os.listdir(dir)))
+    img_path = os.path.join(coco_dir, "000000581715.jpg")
 
     # Ensures that the world has a node tree
     world = bpy.context.scene.world
@@ -253,15 +254,14 @@ def sampling_camera_position(objects, camera_tries, camera_successes):
     camera_tries += 1
     obj1_location = objects[0].get_location()
     center_location = obj1_location
-    radius_min, radius_max = 10, 20
+    radius_min, radius_max = 2, 30
     if len(objects) >= 2:  # If there are two objects
         obj2_location = objects[1].get_location()
         # Calculate center and distance between objects
         center_location = (obj1_location + obj2_location) / 2
         distance_between_objects = np.linalg.norm(obj1_location - obj2_location)
         # Set radius based on object distance
-        radius_min = distance_between_objects * 1.5
-        radius_max = distance_between_objects * 2
+        radius_max = max(distance_between_objects * 3, 30)
 
     # Sample random camera location around the object
     location = bproc.sampler.shell(
@@ -275,7 +275,6 @@ def sampling_camera_position(objects, camera_tries, camera_successes):
     poi = center_location + np.random.uniform([-0.5, -0.5, -0.5], [0.5, 0.5, 0.5])
     # Compute rotation based on vector going from location towards poi
     rotation_matrix = bproc.camera.rotation_from_forward_vec(poi - location, inplane_rot=np.random.uniform(-0.7854, 0.7854))
-    # TODO: DELETE Add homog cam pose based on location an rotation
     # Add homog cam pose based on location and rotation
     cam2world_matrix = bproc.math.build_transformation_mat(location, rotation_matrix)
     # Only add camera pose if object is still visible
