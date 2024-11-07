@@ -8,6 +8,9 @@ import debugpy
 from colorsys import hsv_to_rgb
 import bpy
 from skimage import measure
+import h5py
+from PIL import Image
+import matplotlib.cm as cm
 
 
 # TODO: Ask GPT about:
@@ -164,19 +167,19 @@ def sampling_camera_position(objects, camera_tries, camera_successes):
     camera_tries += 1
     obj1_location = objects[0].get_location()
     center_location = obj1_location
-    radius_min, radius_max = 2, 10
+    radius_min, radius_max = 10, 20
     if len(objects) >= 2:  # If there are two objects
         obj2_location = objects[1].get_location()
         # Calculate center and distance between objects
         center_location = (obj1_location + obj2_location) / 2
         distance_between_objects = np.linalg.norm(obj1_location - obj2_location)
         # Set radius based on object distance
-        radius_min = distance_between_objects * 0.75
-        radius_max = distance_between_objects * 1.5
+        radius_min = distance_between_objects * 1.5
+        radius_max = distance_between_objects * 2
 
     # Sample random camera location around the object
     location = bproc.sampler.shell(
-        center = center_location,
+        center=center_location,
         radius_min=radius_min,
         radius_max=radius_max,
         elevation_min=-90,
@@ -242,6 +245,27 @@ def preprocess_instance_segmaps(instance_segmaps):
     return processed_polygons
 
 
+def convert_hdf5_to_images(hdf5_format_dir, jpg_format_dir):
+    for i in range(len(os.listdir(hdf5_format_dir))):
+        file = str(i) + ".hdf5"
+        file_path = os.path.join(hdf5_format_dir, file)
+        os.makedirs(jpg_format_dir, exist_ok=True)
+        colors_dir = os.path.join(jpg_format_dir, str(i) + "_color.jpg")
+        segmaps_dir = os.path.join(jpg_format_dir, str(i) + "_segmaps.jpg")
+        with h5py.File(file_path, 'r') as file:
+            colors = file['colors'][:]
+            color_img = Image.fromarray(colors, 'RGB')
+            color_img.save(colors_dir, "JPEG")
+            
+            segmaps = file['instance_segmaps'][:]
+            # Normalize or map to a color range for visibility
+            segmaps_normalized = (segmaps - segmaps.min()) / (segmaps.max() - segmaps.min())
+            segmaps_colormap = (cm.viridis(segmaps_normalized)[:, :, :3] * 255).astype(np.uint8)
+            
+            segmaps_img = Image.fromarray(segmaps_colormap)
+            segmaps_img.save(segmaps_dir, "JPEG")
+
+
 def main(args):
     if args.debug:
         # Debugging if specified
@@ -295,17 +319,20 @@ def main(args):
 
         # Preprocess instance_segmaps before passing them to the COCO writer
         # processed_instance_segmaps = preprocess_instance_segmaps(data["instance_segmaps"])
-        processed_instance_segmaps = data["instance_segmaps"]
+        # processed_instance_segmaps = data["instance_segmaps"]
         # Write data to coco file
-        bproc.writer.write_coco_annotations(os.path.join(output_dir, 'coco_format'),
-                                            instance_segmaps=processed_instance_segmaps,
-                                            instance_attribute_maps=data["instance_attribute_maps"],
-                                            colors=data["colors"],
-                                            mask_encoding_format="polygon",
-                                            append_to_existing_output=True)
+        # bproc.writer.write_coco_annotations(os.path.join(output_dir, 'coco_format'),
+        #                                     instance_segmaps=processed_instance_segmaps,
+        #                                     instance_attribute_maps=data["instance_attribute_maps"],
+        #                                     colors=data["colors"],
+        #                                     mask_encoding_format="polygon",
+        #                                     append_to_existing_output=True)
 
         # Save images and masks
-        bproc.writer.write_hdf5(os.path.join(output_dir, 'hdf5_format'), data, append_to_existing_output=True)
+        hdf5_format_dir = os.path.join(output_dir, 'hdf5_format/')
+        bproc.writer.write_hdf5(hdf5_format_dir, data, append_to_existing_output=True)
+
+    convert_hdf5_to_images(hdf5_format_dir, os.path.join(output_dir, 'jpg_format/'))
 
 
 if __name__ == "__main__":
