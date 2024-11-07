@@ -7,6 +7,7 @@ import argparse
 import debugpy
 from colorsys import hsv_to_rgb
 import bpy
+from skimage import measure
 
 
 # TODO: Ask GPT about:
@@ -20,7 +21,16 @@ To run file:
 blenderproc run /home/student/project/data_generation/synthetic_data_generator.py -b
 
 To debug file:
-blenderproc run /home/student/project/data_generation/synthetic_data_generator.py -b -d
+blenderproc run /home/student/project/data_generation/synthetic_data_generator.py -d
+
+If BlenderProc does the f**ing symbol error:
+conda install -c conda-forge libstdcxx-ng
+export LD_LIBRARY_PATH=/anaconda/envs/synth/lib:$LD_LIBRARY_PATH
+
+If the debugger refuses because the port is taken:
+lsof -i :5678
+Take the PID
+kill -9 <PID>
 """
 
 
@@ -139,7 +149,13 @@ def choose_background():
     # Randomly choose and set a background (COCO or HDRI)
     dir = random.choice([coco_dir, hdri_dir])
     img_path = os.path.join(dir, random.choice(os.listdir(dir)))
+
+    # Ensures that the world has a node tree
+    world = bpy.context.scene.world
+    if world.node_tree is None:
+        world.use_nodes = True  # Enable node tree if it's not set
     bproc.world.set_world_background_hdr_img(img_path)
+
     # Set a random world lighting strength
     bpy.data.worlds["World"].node_tree.nodes["Background"].inputs[1].default_value = np.random.uniform(0.1, 1.5)
 
@@ -209,19 +225,38 @@ def further_complicate_image(objects):
     """
 
 
+def preprocess_instance_segmaps(instance_segmaps):
+    """
+    Preprocess instance segmentation maps to ensure correct contour format for COCO writer.
+    
+    :param instance_segmaps: List of binary masks (numpy arrays)
+    :return: List of polygons for COCO annotations
+    """
+    processed_polygons = []
+    for binary_mask in instance_segmaps:
+        contours = measure.find_contours(binary_mask, 0.5)
+        # Convert each contour to a list of points
+        contours_list = [contour.tolist() for contour in contours]
+        processed_polygons.append(contours_list)
+    
+    return processed_polygons
+
+
 def main(args):
     if args.debug:
         # Debugging if specified
         debugpy.listen(5678)
         debugpy.wait_for_client()
 
+    # Initialize BlenderProc
+    bproc.init()
+
     # Set up scene: background, lighting, and instruments
     camera_tries, camera_successes = 0, 0
     while (camera_tries < 10000) and (camera_successes < args.num_images):  # Generate 1000 images
         # Clear all key frames from the previous run
         bproc.utility.reset_keyframes()
-        # Initialize BlenderProc
-        bproc.init()
+        bproc.clean_up()
 
         # Load the surgical instruments
         needle_holder_obj, tweezers_obj = load_instruments()
@@ -258,9 +293,12 @@ def main(args):
         # Render the image and segmentation mask
         data = bproc.renderer.render()
 
+        # Preprocess instance_segmaps before passing them to the COCO writer
+        # processed_instance_segmaps = preprocess_instance_segmaps(data["instance_segmaps"])
+        processed_instance_segmaps = data["instance_segmaps"]
         # Write data to coco file
         bproc.writer.write_coco_annotations(os.path.join(output_dir, 'coco_format'),
-                                            instance_segmaps=data["instance_segmaps"],
+                                            instance_segmaps=processed_instance_segmaps,
                                             instance_attribute_maps=data["instance_attribute_maps"],
                                             colors=data["colors"],
                                             mask_encoding_format="polygon",
