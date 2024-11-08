@@ -47,7 +47,7 @@ hdri_dir = os.path.join(resources_dir, "haven/hdris/")
 current_file_dir = os.path.dirname(os.path.abspath(__file__))
 
 # Output directory for generated data
-output_dir = os.path.join(current_file_dir, "output_specific_back_2-30/")
+output_dir = os.path.join(current_file_dir, "output_bakery_back_2-30/")
 os.makedirs(output_dir, exist_ok=True)
 
 
@@ -219,8 +219,8 @@ def choose_background():
     # Randomly choose and set a background (COCO or HDRI)
     # dir = random.choice([coco_dir, hdri_dir])
     # img_path = os.path.join(dir, random.choice(os.listdir(dir)))
-    img_path = os.path.join(coco_dir, "000000581715.jpg")
-
+    img_path = os.path.join(hdri_dir, "abandoned_bakery/abandoned_bakery_2k.hdr")  # Pizza image
+    # TODO: This is hdri backgrounds, need to go to file level.
     # Ensures that the world has a node tree
     world = bpy.context.scene.world
     if world.node_tree is None:
@@ -282,8 +282,8 @@ def sampling_camera_position(objects, camera_tries, camera_successes):
     or ((len(objects) >= 2) and (objects[1] in bproc.camera.visible_objects(cam2world_matrix))):
         bproc.camera.add_camera_pose(cam2world_matrix, frame=camera_successes)
         camera_successes += 1
-    else: # If the object is not visible
-        sampling_camera_position(objects, camera_tries, camera_successes)
+    else:
+        camera_tries, camera_successes = sampling_camera_position(objects, camera_tries, camera_successes)
     return camera_tries, camera_successes
 
 
@@ -446,6 +446,7 @@ def main(args):
 
     # Convert HDF5 files to JPEG format
     convert_hdf5_to_images(hdf5_format_dir, os.path.join(output_dir, 'jpg_format/'))
+    # TODO: Add coco backgrounds
 
 
 if __name__ == "__main__":
