@@ -47,8 +47,12 @@ hdri_dir = os.path.join(resources_dir, "haven/hdris/")
 current_file_dir = os.path.dirname(os.path.abspath(__file__))
 
 # Output directory for generated data
-output_dir = os.path.join(current_file_dir, "output_bakery_back_2-30/")
+output_dir = os.path.join(current_file_dir, "output_only_coco/")
 os.makedirs(output_dir, exist_ok=True)
+output_hdri_dir = os.path.join(output_dir, 'hdri_background/')
+os.makedirs(output_hdri_dir, exist_ok=True)
+output_coco_dir = os.path.join(output_dir, 'coco_background/')
+os.makedirs(output_coco_dir, exist_ok=True)
 
 
 # Loading the 3D models of surgical instruments
@@ -202,25 +206,15 @@ def initial_camera_setup():
     bproc.camera.set_intrinsics_from_K_matrix(K, image_width, image_height)
 
 
-def choose_background():
-    """
-    Randomly chooses a background image from either the COCO or HDRI directory,
-    sets it as the world background in Blender, and adjusts the world lighting strength.
+def sample_hdri_background():
+    # Randomly choose and set a background image from the HDRI directory
+    img_directory = os.path.join(hdri_dir, random.choice(os.listdir(hdri_dir)))  # Choose a random hdri directory (that contains the image)
+    img_name = random.choice(os.listdir(img_directory))  # Take the image from the chosen directory.
+                                                         # The randomization is to avoid errors if the images within the folder have a different name,
+                                                         # or if the folder contains more than one image file.
+    img_path = os.path.join(img_directory, img_name)
+    # img_path = os.path.join(hdri_dir, "abandoned_bakery/abandoned_bakery_2k.hdr")  # Pizza image
 
-    The function performs the following steps:
-    1. Randomly selects a directory (COCO or HDRI) and then randomly selects an image from that directory.
-    2. Ensures that the Blender world has a node tree, enabling it if necessary.
-    3. Sets the chosen image as the world background using the bproc.world.set_world_background_hdr_img function.
-    4. Randomly sets the world lighting strength to a value between 0.1 and 1.5.
-
-    Raises:
-    - FileNotFoundError: If the chosen directory does not contain any images.
-    """
-    # Randomly choose and set a background (COCO or HDRI)
-    # dir = random.choice([coco_dir, hdri_dir])
-    # img_path = os.path.join(dir, random.choice(os.listdir(dir)))
-    img_path = os.path.join(hdri_dir, "abandoned_bakery/abandoned_bakery_2k.hdr")  # Pizza image
-    # TODO: This is hdri backgrounds, need to go to file level.
     # Ensures that the world has a node tree
     world = bpy.context.scene.world
     if world.node_tree is None:
@@ -364,6 +358,29 @@ def convert_hdf5_to_images(hdf5_format_dir, jpg_format_dir):
             segmaps_img.save(segmaps_dir, "JPEG")
 
 
+def paste_coco_backgrounds(no_background_images_dir):
+    """
+    Pastes images from a directory onto random COCO backgrounds and saves them.
+
+    Args:
+        no_background_images_dir (str): The directory containing images without backgrounds.
+    """
+    # Iterate over each image in the given directory
+    for image in os.listdir(no_background_images_dir):
+        image_path = os.path.join(no_background_images_dir, image)
+        img = Image.open(image_path)
+
+        # Choose a random background from the COCO directory
+        chosen_background = random.choice(os.listdir(coco_dir))
+        background = Image.open(os.path.join(coco_dir, chosen_background))
+        # Resize the background to match the size of the original image
+        background = background.resize(img.size)
+
+        background.paste(img, mask=img.convert('RGBA'))
+        # Save the new image back to the original path, overriding the background-less image
+        background.save(image_path)
+
+
 def main(args):
     if args.debug:
         # Debugging if specified
@@ -375,6 +392,7 @@ def main(args):
 
     # Set up scene: background, lighting, and instruments
     camera_tries, camera_successes = 0, 0
+    is_hdri = False
     while (camera_tries < 10000) and (camera_successes < args.num_images):  # Generate specified number of images
         print("\nCamera tries:", camera_tries, "Camera successes:", camera_successes, "\n")
         # Clear all key frames from the previous run
@@ -401,7 +419,12 @@ def main(args):
         initial_camera_setup()
         
         # Choose a random background for the scene
-        choose_background()
+        # is_hdri = random.random() > 0.5
+        if is_hdri:
+            sample_hdri_background()
+            output_and_background_dir = output_hdri_dir
+        else:
+            output_and_background_dir = output_coco_dir
         
         # Sample camera positions around the objects
         camera_tries, camera_successes = sampling_camera_position(objects, camera_tries, camera_successes)
@@ -433,20 +456,24 @@ def main(args):
         # processed_instance_segmaps = data["instance_segmaps"]
         
         # Uncomment to write data to COCO file
-        # bproc.writer.write_coco_annotations(os.path.join(output_dir, 'coco_format'),
-        #                                     instance_segmaps=processed_instance_segmaps,
+        # bproc.writer.write_coco_annotations(output_coco_dir,
+        #                                     instance_segmaps=data["instance_segmaps"],
         #                                     instance_attribute_maps=data["instance_attribute_maps"],
         #                                     colors=data["colors"],
         #                                     mask_encoding_format="polygon",
         #                                     append_to_existing_output=True)
 
         # Save images and masks in HDF5 format
-        hdf5_format_dir = os.path.join(output_dir, 'hdf5_format/')
-        bproc.writer.write_hdf5(hdf5_format_dir, data, append_to_existing_output=True)
+        # hdf5_format_dir = os.path.join(output_and_background_dir, 'hdf5_format/')
+        # bproc.writer.write_hdf5(hdf5_format_dir, data, append_to_existing_output=True)
 
     # Convert HDF5 files to JPEG format
-    convert_hdf5_to_images(hdf5_format_dir, os.path.join(output_dir, 'jpg_format/'))
-    # TODO: Add coco backgrounds
+    # convert_hdf5_to_images(hdf5_format_dir, os.path.join(output_hdri_dir, 'jpg_format/'))
+    
+    # no_background_images_dir = os.path.join(output_coco_dir, 'jpg_format/')
+    # convert_hdf5_to_images(hdf5_format_dir, no_background_images_dir)
+    # paste_coco_backgrounds(no_background_images_dir)
+    paste_coco_backgrounds(output_coco_dir)
 
 
 if __name__ == "__main__":
