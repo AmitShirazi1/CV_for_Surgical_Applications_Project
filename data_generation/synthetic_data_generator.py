@@ -30,7 +30,6 @@ Take the PID
 kill -9 <PID>
 """
 
-
 # Set the path for 3D models, background images, and HDRI files
 resources_dir = "/datashare/project/"
 
@@ -46,14 +45,16 @@ hdri_dir = os.path.join(resources_dir, "haven/hdris/")
 # Directory for the current file
 current_file_dir = os.path.dirname(os.path.abspath(__file__))
 
+def create_path(path, dir_name):
+    path = os.path.join(path, dir_name)
+    os.makedirs(path, exist_ok=True)
+    return path
 # Output directory for generated data
-output_dir = os.path.join(current_file_dir, "output_only_coco/")
-os.makedirs(output_dir, exist_ok=True)
-output_hdri_dir = os.path.join(output_dir, 'hdri_background/')
-os.makedirs(output_hdri_dir, exist_ok=True)
-output_coco_dir = os.path.join(output_dir, 'coco_background/')
-os.makedirs(output_coco_dir, exist_ok=True)
-
+output_dir = create_path(current_file_dir, "output/")
+output_hdri_dir = create_path(output_dir, 'hdri_background/')
+output_coco_dir = create_path(output_dir, 'coco_background/')
+no_background_images_dir = create_path(output_coco_dir, 'no_background/')
+with_background_dir = create_path(output_coco_dir, 'with_background/')
 
 # Loading the 3D models of surgical instruments
 def load_all_instruments():
@@ -144,6 +145,8 @@ def place_instruments(obj, c):
     # Set random location and rotation for the object
     obj.set_location(np.random.uniform([-1, -1, 0], [1, 1, 1]))
     obj.set_rotation_euler(np.random.uniform([0, 0, 0], [2*np.pi, 2*np.pi, 2*np.pi]))
+    obj.set_scale(np.random.uniform([0.5, 0.5, 0.5], [1, 1, 1]))
+    obj.set_shading_mode(random.choice(["FLAT", "SMOOTH", "AUTO"]), angle_value=random.uniform(20, 45))
     
     return obj
 
@@ -245,6 +248,7 @@ def sampling_camera_position(objects, camera_tries, camera_successes):
         - The function uses `bproc.sampler.shell` to sample the camera location and `bproc.camera.rotation_from_forward_vec` to compute the rotation matrix.
         - The camera pose is added using `bproc.camera.add_camera_pose` if the objects are visible from the sampled position.
     """
+    flag = True
     camera_tries += 1
     obj1_location = objects[0].get_location()
     center_location = obj1_location
@@ -274,11 +278,12 @@ def sampling_camera_position(objects, camera_tries, camera_successes):
     # Only add camera pose if object is still visible
     if (objects[0] in bproc.camera.visible_objects(cam2world_matrix))\
     or ((len(objects) >= 2) and (objects[1] in bproc.camera.visible_objects(cam2world_matrix))):
-        bproc.camera.add_camera_pose(cam2world_matrix, frame=camera_successes)
+        bproc.camera.add_camera_pose(cam2world_matrix)
         camera_successes += 1
     else:
-        camera_tries, camera_successes = sampling_camera_position(objects, camera_tries, camera_successes)
-    return camera_tries, camera_successes
+        # camera_tries, camera_successes = sampling_camera_position(objects, camera_tries, camera_successes)
+        flag = False
+    return camera_tries, camera_successes, flag
 
 
 def further_complicate_image(objects):
@@ -367,6 +372,8 @@ def paste_coco_backgrounds(no_background_images_dir):
     """
     # Iterate over each image in the given directory
     for image in os.listdir(no_background_images_dir):
+        # if "color" not in image:
+        #     continue
         image_path = os.path.join(no_background_images_dir, image)
         img = Image.open(image_path)
 
@@ -378,7 +385,7 @@ def paste_coco_backgrounds(no_background_images_dir):
 
         background.paste(img, mask=img.convert('RGBA'))
         # Save the new image back to the original path, overriding the background-less image
-        background.save(image_path)
+        background.save(os.path.join(with_background_dir, image))
 
 
 def main(args):
@@ -392,9 +399,9 @@ def main(args):
 
     # Set up scene: background, lighting, and instruments
     camera_tries, camera_successes = 0, 0
-    is_hdri = False
+    is_hdri = True
     while (camera_tries < 10000) and (camera_successes < args.num_images):  # Generate specified number of images
-        print("\nCamera tries:", camera_tries, "Camera successes:", camera_successes, "\n")
+        # print("\nCamera tries:", camera_tries, "Camera successes:", camera_successes, "\n")
         # Clear all key frames from the previous run
         bproc.utility.reset_keyframes()
         bproc.clean_up()
@@ -427,13 +434,14 @@ def main(args):
             output_and_background_dir = output_coco_dir
         
         # Sample camera positions around the objects
-        camera_tries, camera_successes = sampling_camera_position(objects, camera_tries, camera_successes)
-        
+        flag = False
+        while not flag:
+            camera_tries, camera_successes, flag = sampling_camera_position(objects, camera_tries, camera_successes)
         # Uncomment to add additional variations like blur or noise
         # further_complicate_image(objects)
 
         # Set the maximum number of samples for rendering to speed up the process
-        bproc.renderer.set_max_amount_of_samples(100)
+        bproc.renderer.set_max_amount_of_samples(16)
         
         # Disable transparency so the background becomes opaque
         bproc.renderer.set_output_format(enable_transparency=False)
@@ -445,8 +453,10 @@ def main(args):
         # Uncomment to activate normal and depth rendering
         bproc.renderer.enable_depth_output(activate_antialiasing=False)
         bproc.renderer.enable_normals_output()
-        bproc.renderer.set_noise_threshold(0.01)
         """
+
+        bproc.renderer.set_denoiser("OPTIX")
+        bproc.renderer.set_noise_threshold(0.1)
 
         # Render the image and segmentation mask
         data = bproc.renderer.render()
@@ -456,24 +466,26 @@ def main(args):
         # processed_instance_segmaps = data["instance_segmaps"]
         
         # Uncomment to write data to COCO file
-        # bproc.writer.write_coco_annotations(output_coco_dir,
-        #                                     instance_segmaps=data["instance_segmaps"],
-        #                                     instance_attribute_maps=data["instance_attribute_maps"],
-        #                                     colors=data["colors"],
-        #                                     mask_encoding_format="polygon",
-        #                                     append_to_existing_output=True)
+        # try:
+        #     bproc.writer.write_coco_annotations(no_background_images_dir,
+        #                                         instance_segmaps=data["instance_segmaps"],
+        #                                         instance_attribute_maps=data["instance_attribute_maps"],
+        #                                         colors=data["colors"],
+        #                                         mask_encoding_format="polygon",
+        #                                         append_to_existing_output=True)
+        # except:
+        #     pass
 
         # Save images and masks in HDF5 format
-        # hdf5_format_dir = os.path.join(output_and_background_dir, 'hdf5_format/')
-        # bproc.writer.write_hdf5(hdf5_format_dir, data, append_to_existing_output=True)
+        hdf5_format_dir = os.path.join(output_and_background_dir, 'hdf5_format/')
+        bproc.writer.write_hdf5(hdf5_format_dir, data, append_to_existing_output=True)
 
     # Convert HDF5 files to JPEG format
-    # convert_hdf5_to_images(hdf5_format_dir, os.path.join(output_hdri_dir, 'jpg_format/'))
+    convert_hdf5_to_images(hdf5_format_dir, os.path.join(output_hdri_dir, 'jpg_format/'))
     
-    # no_background_images_dir = os.path.join(output_coco_dir, 'jpg_format/')
-    # convert_hdf5_to_images(hdf5_format_dir, no_background_images_dir)
+    # convert_hdf5_to_images(hdf5_format_dir, os.path.join(output_coco_dir, 'jpg_format/'))
     # paste_coco_backgrounds(no_background_images_dir)
-    paste_coco_backgrounds(output_coco_dir)
+    # paste_coco_backgrounds(os.path.join(no_background_images_dir, 'images/'))
 
 
 if __name__ == "__main__":
