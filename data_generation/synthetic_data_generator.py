@@ -136,9 +136,8 @@ def place_instruments(obj, c):
         # Set random shader values for the material
         try:
             mat.set_principled_shader_value("Specular IOR Level", random.uniform(0, 1))
-            mat.set_principled_shader_value("Roughness", random.uniform(0, 1))
-            mat.set_principled_shader_value("Metallic", 1)
             mat.set_principled_shader_value("Roughness", 0.2)
+            mat.set_principled_shader_value("Metallic", 1)
         except AttributeError:
             print(f"Error setting shader value for material {mat.get_name()}")
 
@@ -151,7 +150,7 @@ def place_instruments(obj, c):
     return obj
 
 
-def set_lights():
+def set_lights(objects):
     """
     Randomizes and sets up lighting conditions in the scene.
 
@@ -170,19 +169,34 @@ def set_lights():
     """
     # Randomize lighting conditions
     num_lights = random.randint(1, 3)
+    obj1_location = objects[0].get_location()
+    center_location = obj1_location
+    radius_min, radius_max = 40, 60
+    if len(objects) >= 2:  # If there are two objects
+        obj2_location = objects[1].get_location()
+        # Calculate center and distance between objects
+        center_location = (obj1_location + obj2_location) / 2
+
     for i in range(num_lights):
         light = bproc.types.Light()
         light_types = ["POINT", "SUN", "SPOT", "AREA"]
         light.set_type(random.choice(light_types))
         light.set_color(np.random.uniform([0.5, 0.5, 0.5], [1.0, 1.0, 1.0]))
         if num_lights == 1:  # Only one main light
-            lower, upper = 500, 1500
+            lower, upper = 500, 1000
         elif i == 0:  # Main light, when there are others.
-            lower, upper = 1000, 1500
+            lower, upper = 800, 1000
         else:  # Secondary lights.
-            lower, upper = 200, 750
+            lower, upper = 200, 500
         light.set_energy(random.uniform(lower, upper))
-        light.set_location(np.random.uniform([-5, -5, 5], [5, 5, 10]))
+        light.set_location(bproc.sampler.shell(
+                                            center=center_location,
+                                            radius_min=radius_min,
+                                            radius_max=radius_max,
+                                            elevation_min=1,
+                                            elevation_max=90
+                                            ))
+        # light.set_location(np.random.uniform([-5, -5, 5], [5, 5, 10]))
 
 
 # Load the camera parameters from json file
@@ -252,7 +266,7 @@ def sampling_camera_position(objects, camera_tries, camera_successes):
     camera_tries += 1
     obj1_location = objects[0].get_location()
     center_location = obj1_location
-    radius_min, radius_max = 2, 30
+    radius_min, radius_max = 10, 30
     if len(objects) >= 2:  # If there are two objects
         obj2_location = objects[1].get_location()
         # Calculate center and distance between objects
@@ -284,32 +298,6 @@ def sampling_camera_position(objects, camera_tries, camera_successes):
         # camera_tries, camera_successes = sampling_camera_position(objects, camera_tries, camera_successes)
         flag = False
     return camera_tries, camera_successes, flag
-
-
-def further_complicate_image(objects):
-    # Additional variations:
-    # Add some random camera effects like blur or noise
-    if random.random() > 0.5:
-        # bproc.camera.add_motion_blur()
-        bproc.renderer.enable_motion_blur()
-    if random.random() > 0.5:
-        bproc.camera.add_sensor_noise()
-
-
-    # # Set the camera's random position and rotation
-    bproc.camera.set_location(np.random.uniform([-2, -2, 2], [2, 2, 4]))
-    bproc.camera.set_rotation_euler(np.random.uniform([0, 0, 0], [np.pi/4, np.pi/4, np.pi/4]))
-    """
-    # point of interest
-    poi = bproc.object.compute_poi(objects)
-    # Sample random camera location above objects
-    location = np.random.uniform([-10, -10, 8], [10, 10, 12])
-    # Compute rotation based on vector going from location towards poi
-    rotation_matrix = bproc.camera.rotation_from_forward_vec(poi - location, inplane_rot=np.random.uniform(-0.7854, 0.7854))
-    # Add homog cam pose based on location and rotation
-    cam2world_matrix = bproc.math.build_transformation_mat(location, rotation_matrix)
-    bproc.camera.add_camera_pose(cam2world_matrix)
-    """
 
 
 def preprocess_instance_segmaps(instance_segmaps):
@@ -420,7 +408,7 @@ def main(args):
         append_instruments([needle_holder_obj, tweezers_obj])
         
         # Set up lights in the scene
-        set_lights()
+        set_lights(objects)
         
         # Set up initial camera parameters
         initial_camera_setup()
@@ -456,7 +444,7 @@ def main(args):
         """
 
         bproc.renderer.set_denoiser("OPTIX")
-        bproc.renderer.set_noise_threshold(0.1)
+        bproc.renderer.set_noise_threshold(0.05)
 
         # Render the image and segmentation mask
         data = bproc.renderer.render()
