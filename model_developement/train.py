@@ -7,6 +7,7 @@ import torch.nn as nn
 import argparse
 import glob
 import h5py
+from tqdm import tqdm
 
 
 class SegmentationDataset(Dataset):
@@ -42,7 +43,7 @@ class SegmentationDataset(Dataset):
         # Load the image and mask from the HDF5 file at the given index
         with h5py.File(self.images_paths[idx], "r") as file:
             image = file['colors'][:]
-            mask = file['instance_segmaps'][:]
+            mask = file['instance_segmaps'][:]  # TODO: Change >2 to 0
         # Apply the transformations to the image and mask
         image = self.images_transform(image)
         mask = self.masks_transform(mask)[0]
@@ -52,7 +53,7 @@ class SegmentationDataset(Dataset):
 def main(args):
     # Create the dataset and dataloader
     dataset = SegmentationDataset(args.images_path)
-    dataloader = DataLoader(dataset, batch_size=50, shuffle=True)
+    dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
     
     # Define the model, loss function, and optimizer
     model = smp.DeepLabV3Plus(encoder_name="resnet50", encoder_weights="imagenet", in_channels=3, classes=3)
@@ -61,17 +62,15 @@ def main(args):
     criterion = nn.CrossEntropyLoss()  # Use CrossEntropyLoss for multi-class segmentation
     optimizer = optim.Adam(model.parameters(), lr=0.001)  # Use Adam optimizer with learning rate 0.001
     
-    model_path = "./model_developement/deeplabv3_model.pth"
+    model_path = "./model_developement/deeplabv3_model_1000data.pth"
     # Training loop
     for epoch in range(25):  # Train for 25 epochs
         model.train()  # Set the model to training mode
-        for images, masks in dataloader:  # Iterate over batches of images and masks
+        for tqdm(images, masks) in dataloader:  # Iterate over batches of images and masks
             images, masks = images.to(device), masks.to(device)  # Move images and masks to the appropriate device
-
             # Forward pass
             outputs = model(images)  # Get model predictions
             loss = criterion(outputs, masks)  # Calculate the loss
-
             # Backward pass
             optimizer.zero_grad()  # Zero the gradients
             loss.backward()  # Backpropagate the loss

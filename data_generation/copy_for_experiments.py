@@ -13,6 +13,13 @@ from PIL import Image
 import matplotlib.cm as cm
 
 
+# Changes:
+# 1. Problem with the colors of nh and t when there's only one of them in the scene - scissors were yellow. Changed to always have both.
+# 2. This also fixed the the problem with "cutting" the segmaps at 3 and additional objects entering.
+# 3. Cut the segmaps at 3.
+# 4. Increased nh and t distances, decreased additional objects' distances.
+# 5. Everything works to this point, example images in output_objects.
+
 """
 To run file:
 blenderproc run /home/student/project/data_generation/synthetic_data_generator.py -b
@@ -97,14 +104,7 @@ def load_instruments():
     def load_obj(path):
         return bproc.loader.load_obj(path)[0]
     
-    # Randomly choose whether to load both instruments or just one
-    chosen_tool = random.random() > 0.5
-    if chosen_tool:
-        needle_holder_obj = load_obj(nh_rand)
-        tweezers_obj = load_obj(t_rand) if random.random() > 0.2 else None
-    else:
-        needle_holder_obj = load_obj(nh_rand) if random.random() > 0.2 else None
-        tweezers_obj = load_obj(t_rand)
+    needle_holder_obj, tweezers_obj = load_obj(nh_rand), load_obj(t_rand)
     return needle_holder_obj, tweezers_obj
 
 
@@ -142,7 +142,7 @@ def place_instruments(obj, c):
             print(f"Error setting shader value for material {mat.get_name()}")
 
     # Set random location and rotation for the object
-    obj.set_location(np.random.uniform([-1, -1, 0], [1, 1, 1]))
+    obj.set_location(np.random.uniform([-1.5, -1.5, 0], [1.5, 1.5, 1.5]))
     obj.set_rotation_euler(np.random.uniform([0, 0, 0], [2*np.pi, 2*np.pi, 2*np.pi]))
     obj.set_scale(np.random.uniform([0.5, 0.5, 0.5], [1, 1, 1]))
     obj.set_shading_mode(random.choice(["FLAT", "SMOOTH", "AUTO"]), angle_value=random.uniform(20, 45))
@@ -152,15 +152,15 @@ def place_instruments(obj, c):
 
 def add_additional_objects():
     # Add a cube, sphere, or random geometry as noise
-    for _ in range(5):  # Add 3 random objects
+    for c in range(3, 3+5):  # Add 3 random objects
         obj_type = random.choice(['CUBE', 'SPHERE', 'CYLINDER', 'CONE', "PLANE", "MONKEY"])
         obj = bproc.object.create_primitive(obj_type)
         
         # Randomly place objects around the scene
         obj.set_location([
-            random.uniform(-4, 4),  # X-axis range
-            random.uniform(-4, 4),  # Y-axis range
-            random.uniform(0, 1)    # Z-axis range (to be above the ground)
+            random.uniform(-3, 3),  # X-axis range
+            random.uniform(-3, 3),  # Y-axis range
+            random.uniform(0, 3)    # Z-axis range (to be above the ground)
         ])
         
         # Random scaling
@@ -181,7 +181,7 @@ def add_additional_objects():
         obj_material.set_principled_shader_value("Roughness", random.uniform(0.4, 1.0))
         obj.replace_materials(obj_material)
         # Assign the background category to the new objects by not setting the category ID
-        obj.set_cp("category_id", None)
+        obj.set_cp("category_id", c)
 
 
 def set_lights(objects):
@@ -377,6 +377,9 @@ def convert_hdf5_to_images(hdf5_format_dir, jpg_format_dir):
             color_img.save(colors_dir, "JPEG")
             
             segmaps = file['instance_segmaps'][:]
+            # Set values greater than 2 to 0
+            segmaps[segmaps > 2] = 0
+            
             # Normalize or map to a color range for visibility
             segmaps_normalized = (segmaps - segmaps.min()) / (segmaps.max() - segmaps.min())
             segmaps_colormap = (cm.viridis(segmaps_normalized)[:, :, :3] * 255).astype(np.uint8)
@@ -471,7 +474,7 @@ def main(args):
         bproc.renderer.set_output_format(enable_transparency=False)
         
         # Enable segmentation masks (per class and per instance)
-        bproc.renderer.enable_segmentation_output(map_by=["category_id"])
+        bproc.renderer.enable_segmentation_output(map_by=["category_id", "instance", "name"])
 
         """
         # Uncomment to activate normal and depth rendering

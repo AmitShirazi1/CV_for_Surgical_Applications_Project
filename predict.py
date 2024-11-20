@@ -8,7 +8,7 @@ import os
 
 # Function to predict on a new image
 def predict(image_path, output_dir):
-    model_path = "./model_developement/deeplabv3_model.pth"
+    model_path = "./model_developement/deeplabv3_model_1000data.pth"
     output_path = os.path.join(output_dir, "image_pred.jpg")
     os.makedirs(output_dir, exist_ok=True)
 
@@ -44,7 +44,15 @@ def predict(image_path, output_dir):
 
     with torch.no_grad():
         output = model(input_batch)[0]
-    output_predictions = output.argmax(0)
+    softed_output = torch.nn.functional.softmax(output, dim=0)
+    # Find the maximum value along dimension 0 (across the first axis)
+    max_values, argmax_indices = softed_output.max(dim=0)
+
+    # Step 2: Check if the max values are greater than or equal to 0.7
+    mask = max_values >= 0.5
+
+    # Step 3: Set argmax indices to 0 where max value is less than 0.7
+    output_predictions = argmax_indices * mask.long()
 
     # Plot the results
     plt.figure(figsize=(10, 5))
@@ -61,6 +69,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--image_path", type=str, help="Path to the input image.\
                         For example: './data_generation/output/hdri_background/jpg_format/0_color.jpg'")
-    parser.add_argument("-o", "--output_dir", type=str, help="Path to the directory where the output image will be saved.\n\
+    parser.add_argument("-o", "--output_dir", type=str, default='./model_developement/output/', help="Path to the directory where the output image will be saved.\n\
                         For example: './model_developement/output/'")
     predict(parser.parse_args().image_path, parser.parse_args().output_dir)

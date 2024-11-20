@@ -23,7 +23,7 @@ def apply_custom_colormap_with_transparency(mask, category_colors):
 
 # Function to process video frames
 def predict_video(video_path, output_dir):
-    model_path = "./model_developement/deeplabv3_model.pth"
+    model_path = "./model_developement/deeplabv3_model_1000data.pth"
     output_path = os.path.join(output_dir, "video_pred.mp4")
     os.makedirs(output_dir, exist_ok=True)
 
@@ -91,8 +91,20 @@ def predict_video(video_path, output_dir):
         # Predict segmentation
         with torch.no_grad():
             output = model(input_batch)[0]
-        # Generate segmentation mask (output_predictions is the predicted class map)
-        output_predictions = output.argmax(0).cpu().numpy()
+        softed_output = torch.nn.functional.softmax(output, dim=0)
+        # Find the maximum value along dimension 0 (across the first axis)
+        max_values, argmax_indices = softed_output.max(dim=0)
+        max_values = max_values.cpu().numpy()
+
+        # Step 2: Check if the max values are greater than or equal to 0.7
+        mask = max_values >= 0.5
+
+        # Step 3: Set argmax indices to 0 where max value is less than 0.7
+        output_predictions = argmax_indices.cpu() * np.long(mask)
+
+
+        # # Generate segmentation mask (output_predictions is the predicted class map)
+        # output_predictions = output.argmax(0).cpu().numpy()
 
         # Apply custom colormap with transparency
         color_mask = apply_custom_colormap_with_transparency(output_predictions, CATEGORY_COLORS)
@@ -123,6 +135,6 @@ if __name__ == "__main__":
                         For tunning, choose from path: '/datashare/project/vids_tune/'.\n\
                         For testing, choose from path: '/datashare/project/vids_test/'.")
     # For trying on a short video: /datashare/HW1/ood_video_data/surg_1.mp4
-    parser.add_argument("-o", "--output_dir", type=str, help="Path to the directory where the output video will be saved.\n\
+    parser.add_argument("-o", "--output_dir", type=str, default='./model_developement/output/', help="Path to the directory where the output video will be saved.\n\
                         For example: './model_developement/output/'.")
     predict_video(parser.parse_args().input_video_path, parser.parse_args().output_dir)
