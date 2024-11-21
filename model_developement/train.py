@@ -43,7 +43,7 @@ class SegmentationDataset(Dataset):
         # Load the image and mask from the HDF5 file at the given index
         with h5py.File(self.images_paths[idx], "r") as file:
             image = file['colors'][:]
-            mask = file['instance_segmaps'][:]  # TODO: Change >2 to 0
+            mask = file['category_id_segmaps'][:]
         # Apply the transformations to the image and mask
         image = self.images_transform(image)
         mask = self.masks_transform(mask)[0]
@@ -64,9 +64,9 @@ def main(args):
     
     model_path = "./model_developement/deeplabv3_model_1000data.pth"
     # Training loop
-    for epoch in range(25):  # Train for 25 epochs
+    for epoch in range(30):  # Train for 25 epochs
         model.train()  # Set the model to training mode
-        for tqdm(images, masks) in dataloader:  # Iterate over batches of images and masks
+        for images, masks in tqdm(dataloader):  # Iterate over batches of images and masks
             images, masks = images.to(device), masks.to(device)  # Move images and masks to the appropriate device
             # Forward pass
             outputs = model(images)  # Get model predictions
@@ -84,5 +84,5 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('-i', '--images_path', type=str, default='./data_generation/output/hdri_background/hdf5_format/', help='Path to hdf5 images directory')
+    parser.add_argument('-i', '--images_path', type=str, default='./data_generation/output_objects/hdri_background/hdf5_format/', help='Path to hdf5 images directory')
     main(parser.parse_args())

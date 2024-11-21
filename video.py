@@ -7,6 +7,10 @@ import numpy as np
 import argparse
 import os
 
+DEV_OUTPUT_PATH = "./model_developement/output/"
+TEST_OUTPUT_PATH = "./domain_adaptation/output/"
+
+
 def apply_custom_colormap_with_transparency(mask, category_colors):
     """ Map each category to a color and set the background transparent. """
     height, width = mask.shape
@@ -97,7 +101,7 @@ def predict_video(video_path, output_dir):
         max_values = max_values.cpu().numpy()
 
         # Step 2: Check if the max values are greater than or equal to 0.7
-        mask = max_values >= 0.5
+        mask = max_values >= 0  # TODO: Check this value.
 
         # Step 3: Set argmax indices to 0 where max value is less than 0.7
         output_predictions = argmax_indices.cpu() * np.long(mask)
@@ -131,10 +135,28 @@ def predict_video(video_path, output_dir):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-v", "--input_video_path", type=str, help="Path to input video.\n\
-                        For tunning, choose from path: '/datashare/project/vids_tune/'.\n\
-                        For testing, choose from path: '/datashare/project/vids_test/'.")
+    parser.add_argument("-v", "--input_video_path", type=str, default="/datashare/HW1/ood_video_data/surg_1.mp4",
+                        help="Path to input video.\n\
+                        For tunning, choose a file from dir: '/datashare/project/vids_tune/'.\n\
+                        For testing, choose a file from dir: '/datashare/project/vids_test/'.")
     # For trying on a short video: /datashare/HW1/ood_video_data/surg_1.mp4
-    parser.add_argument("-o", "--output_dir", type=str, default='./model_developement/output/', help="Path to the directory where the output video will be saved.\n\
-                        For example: './model_developement/output/'.")
-    predict_video(parser.parse_args().input_video_path, parser.parse_args().output_dir)
+    parser.add_argument("-o", "--output_dir", type=str, help="Path to the directory where the output video will be saved.\n\
+                        For example: f{DEV_OUTPUT_PATH}.")
+    parser.add_argument("--dev", action="store_true", help="Use this flag to run the script in development mode.\
+                        This will use the output directory: f{DEV_OUTPUT_PATH}")
+    parser.add_argument("--test", action="store_true", help="Use this flag to run the script in test mode.\
+                        This will use the output directory: f{TEST_OUTPUT_PATH}")
+    args = parser.parse_args()
+
+    if args.input_video_path is None:
+        print("Please provide the path to the input video using the '-v' flag.")
+        exit(1)
+    if (args.output_dir is None) and (args.dev is False) and (args.test is False):
+        print("Please provide an output directory using the '-o' flag, or use --dev or --test.")
+        exit(1)
+    if sum([bool(args.output_dir), args.dev, args.test]) > 1:
+        print("Please use only one of the '--dev', '--test' flags, or provide an output directory using the '-o' flag.")
+        exit(1)
+    output_dir = args.output_dir if args.output_dir else DEV_OUTPUT_PATH if args.dev else TEST_OUTPUT_PATH
+
+    predict_video(args.input_video_path, output_dir)

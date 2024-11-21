@@ -12,14 +12,6 @@ import h5py
 from PIL import Image
 import matplotlib.cm as cm
 
-
-# Changes:
-# 1. Problem with the colors of nh and t when there's only one of them in the scene - scissors were yellow. Changed to always have both.
-# 2. This also fixed the the problem with "cutting" the segmaps at 3 and additional objects entering.
-# 3. Cut the segmaps at 3.
-# 4. Increased nh and t distances, decreased additional objects' distances.
-# 5. Everything works to this point, example images in output_objects.
-
 """
 To run file:
 blenderproc run /home/student/project/data_generation/synthetic_data_generator.py -b

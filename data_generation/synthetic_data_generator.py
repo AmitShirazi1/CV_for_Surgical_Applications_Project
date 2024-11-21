@@ -11,6 +11,7 @@ from skimage import measure
 import h5py
 from PIL import Image
 import matplotlib.cm as cm
+import gc
 
 
 """
@@ -28,7 +29,83 @@ If the debugger refuses because the port is taken:
 lsof -i :5678
 Take the PID
 kill -9 <PID>
+
+
+-------------- Trying COCO --------------
+
+def preprocess_instance_segmaps(instance_segmaps):
+    # Preprocess instance segmentation maps to ensure correct contour format for COCO writer.
+    
+    # :param instance_segmaps: List of binary masks (numpy arrays)
+    # :return: List of polygons for COCO annotations
+    processed_polygons = []
+    for binary_mask in instance_segmaps:
+        contours = measure.find_contours(binary_mask, 0.5)
+        # Convert each contour to a list of points
+        contours_list = [contour.tolist() for contour in contours]
+        processed_polygons.append(contours_list)
+    
+    return processed_polygons
+
+def paste_coco_backgrounds(no_background_images_dir):
+    # Pastes images from a directory onto random COCO backgrounds and saves them.
+
+    # Args:
+    #     no_background_images_dir (str): The directory containing images without backgrounds.
+    # Iterate over each image in the given directory
+    for image in os.listdir(no_background_images_dir):
+        # if "color" not in image:
+        #     continue
+        image_path = os.path.join(no_background_images_dir, image)
+        img = Image.open(image_path)
+
+        # Choose a random background from the COCO directory
+        chosen_background = random.choice(os.listdir(coco_dir))
+        background = Image.open(os.path.join(coco_dir, chosen_background))
+        # Resize the background to match the size of the original image
+        background = background.resize(img.size)
+
+        background.paste(img, mask=img.convert('RGBA'))
+        # Save the new image back to the original path, overriding the background-less image
+        background.save(os.path.join(with_background_dir, image))
+
+        
+In main:
+
+# Before while:
+is_hdri = True
+
+# In while, when choosing background:
+is_hdri = random.random() > 0.5
+if is_hdri:
+    sample_hdri_background()
+    output_and_background_dir = output_hdri_dir
+else:
+    output_and_background_dir = output_coco_dir
+
+# After rendering:
+# Uncomment to preprocess instance segmentation maps before passing them to the COCO writer
+processed_instance_segmaps = preprocess_instance_segmaps(data["instance_segmaps"])
+processed_instance_segmaps = data["instance_segmaps"]
+
+# Uncomment to write data to COCO file
+try:
+    bproc.writer.write_coco_annotations(no_background_images_dir,
+                                        instance_segmaps=data["instance_segmaps"],
+                                        instance_attribute_maps=data["instance_attribute_maps"],
+                                        colors=data["colors"],
+                                        mask_encoding_format="polygon",
+                                        append_to_existing_output=True)
+except:
+    pass
+
+# After while, after converting hdf5 to jpg:
+convert_hdf5_to_images(hdf5_format_dir, os.path.join(output_coco_dir, 'jpg_format/'))
+paste_coco_backgrounds(no_background_images_dir)
+paste_coco_backgrounds(os.path.join(no_background_images_dir, 'images/'))
+
 """
+
 
 # Set the path for 3D models, background images, and HDRI files
 resources_dir = "/datashare/project/"
@@ -78,43 +155,59 @@ def load_all_instruments():
 
 def load_instruments():
     """
-    Randomly loads 3D models of surgical instruments (needle holder and tweezers) from specified directories.
-
-    The function randomly selects .obj files from the given directories for needle holders and tweezers.
-    It then randomly decides which instrument to load and whether to load both or just one of them.
+    Loads a random number of instrument objects from specified directories.
+    This function randomly selects a number of instruments (between 1 and 4) to load.
+    It chooses .obj files from the specified directories for needle holders and tweezers,
+    loads them using the `bproc.loader.load_obj` method, and assigns a category ID to each object.
 
     Returns:
-        tuple: A tuple containing two elements:
-            - needle_holder_obj: The loaded needle holder object or None.
-            - tweezers_obj: The loaded tweezers object or None.
-    """
+        list: A list of loaded instrument objects with assigned category IDs.
+    """    
     # Randomly choose an .obj file from the given directory
     def choose_obj_file(dir):
         return random.choice([os.path.join(dir, f) for f in os.listdir(dir) if f.endswith('.obj')])
-    nh_rand, t_rand = choose_obj_file(needle_holder_model_dir), choose_obj_file(tweezers_model_dir)
-
+    
     # Load the .obj file using the `bproc.loader.load_obj` method
     def load_obj(path):
         return bproc.loader.load_obj(path)[0]
     
-    # Randomly choose whether to load both instruments or just one
-    chosen_tool = random.random() > 0.5
-    if chosen_tool:
-        needle_holder_obj = load_obj(nh_rand)
-        tweezers_obj = load_obj(t_rand) if random.random() > 0.2 else None
-    else:
-        needle_holder_obj = load_obj(nh_rand) if random.random() > 0.2 else None
-        tweezers_obj = load_obj(t_rand)
-    return needle_holder_obj, tweezers_obj
+    # Randomly choose the number of instruments to load
+    instrument_num = np.random.choice(range(1, 5), p=[0.1, 0.6, 0.2, 0.1])
+    tool_paths = [choose_obj_file(needle_holder_model_dir), choose_obj_file(tweezers_model_dir)]
+
+    tool_objs = []
+    for i in range(instrument_num):
+        if len(tool_paths):  # Randomly choose a tool, options are needle holder and tweezers
+            tool_path = random.choice(tool_paths)
+            tool_paths.remove(tool_path)
+
+        else:  # If we have put two instruments, one needle holder and one tweezers, then we can randomely add more of them.
+            dir = random.choice([needle_holder_model_dir, tweezers_model_dir])
+            tool_path = choose_obj_file(dir)
+        
+        tool_obj = load_obj(tool_path)
+        # Set the category ID for the object
+        c = 2 if "tweezers" in tool_path else 1
+        tool_obj.set_cp("category_id", c)
+        tool_objs.append(tool_obj)
+    return tool_objs
 
 
-def place_instruments(obj, c):
-    # Set the category ID for the object
-    obj.set_cp("category_id", c)
-    
+def set_instruments_appearance_and_location(obj): 
+    """
+    Sets the appearance and location of the given object.
+    This function iterates through the materials of the object and performs the following actions:
+    - If the material is gold, sets a random gold color.
+    - Sets random shader values for the material, including Specular IOR Level, Roughness, and Metallic.
+    - Sets a random location, rotation, and scale for the object.
+    - Sets a random shading mode for the object.
+
+    Parameters:
+        obj: The object whose appearance and location are to be set. The object should have a corresponding '.mtl' file.
+    """
     # Iterate through the materials of the object
     for mat in obj.get_materials():
-        # Check if the material has a Principled BSDF node
+        # Check if the material has a Principled BSDF node (For error-checking purposes).
         has_principled_bsdf = False
         for node in mat.nodes:
             if node.type == 'BSDF_PRINCIPLED':
@@ -142,17 +235,32 @@ def place_instruments(obj, c):
             print(f"Error setting shader value for material {mat.get_name()}")
 
     # Set random location and rotation for the object
-    obj.set_location(np.random.uniform([-1, -1, 0], [1, 1, 1]))
+    obj.set_location(np.random.uniform([-2, -2, 0], [2, 2, 1]))
     obj.set_rotation_euler(np.random.uniform([0, 0, 0], [2*np.pi, 2*np.pi, 2*np.pi]))
     obj.set_scale(np.random.uniform([0.5, 0.5, 0.5], [1, 1, 1]))
     obj.set_shading_mode(random.choice(["FLAT", "SMOOTH", "AUTO"]), angle_value=random.uniform(20, 45))
-    
-    return obj
 
 
 def add_additional_objects():
-    # Add a cube, sphere, or random geometry as noise
-    for _ in range(5):  # Add 3 random objects
+    """
+    Adds a random number of additional objects with various shapes to the scene,
+    with random locations, scales, and materials.
+    The objects are placed randomly within a specified range and assigned random colors and roughness values.
+
+    The function performs the following steps:
+    1. Generates a random number of objects to add (between 3 and 7).
+    2. For each object:
+        - Randomly selects an object type from a predefined list.
+        - Creates the object using the selected type.
+        - Sets a random location within the specified range.
+        - Sets a random scale for each axis.
+        - Creates a random material with a random color and roughness.
+        - Assigns the material to the object.
+        - Sets the category ID to 0 (background category).
+    """
+    num = random.randint(3, 7)
+    for _ in range(num):  # Add random objects in a random amount of times.
+        # Add a cube, sphere, or random geometry as additional objects that interact with the medical instruments.
         obj_type = random.choice(['CUBE', 'SPHERE', 'CYLINDER', 'CONE', "PLANE", "MONKEY"])
         obj = bproc.object.create_primitive(obj_type)
         
@@ -160,17 +268,17 @@ def add_additional_objects():
         obj.set_location([
             random.uniform(-4, 4),  # X-axis range
             random.uniform(-4, 4),  # Y-axis range
-            random.uniform(0, 1)    # Z-axis range (to be above the ground)
+            random.uniform(0, 3)    # Z-axis range (to be above the ground)
         ])
         
         # Random scaling
         obj.set_scale([
-            random.uniform(0.05, 0.8),  # Scale factor for X-axis
-            random.uniform(0.05, 0.8),  # Scale factor for Y-axis
-            random.uniform(0.05, 0.8)   # Scale factor for Z-axis
+            random.uniform(0.05, 1),  # Scale factor for X-axis
+            random.uniform(0.05, 1),  # Scale factor for Y-axis
+            random.uniform(0.05, 1)   # Scale factor for Z-axis
         ])
         
-        # Assign a random color or material
+        # Assign a random color, material and roughness to the object
         obj_material = bproc.material.create("random_material")
         obj_material.set_principled_shader_value("Base Color", [
             random.uniform(0, 1),  # R
@@ -178,51 +286,56 @@ def add_additional_objects():
             random.uniform(0, 1),  # B
             1.0                    # Alpha
         ])
-        obj_material.set_principled_shader_value("Roughness", random.uniform(0.4, 1.0))
+        obj_material.set_principled_shader_value("Roughness", random.uniform(0.2, 0.6))
         obj.replace_materials(obj_material)
         # Assign the background category to the new objects by not setting the category ID
-        obj.set_cp("category_id", None)
+        obj.set_cp("category_id", 0)
 
 
 def set_lights(objects):
     """
-    Randomizes and sets up lighting conditions in the scene.
+    Randomizes and sets lighting conditions, with respect to the given objects.
 
-    This function creates a random number of lights (between 1 and 3) and sets their types, colors, energy levels, 
-    and locations. The main light (or the only light if there is just one) has higher energy compared to secondary lights.
+    Parameters:
+        objects (list): A list of objects for which the lighting conditions are to be set. 
 
-    The types of lights that can be created are: POINT, SUN, SPOT, and AREA.
-
-    The color of each light is randomly chosen within a specified range of RGB values.
-
-    The energy of the lights is set based on their role:
-    - If there is only one light, its energy is set between 500 and 1500.
-    - If there are multiple lights, the main light's energy is set between 1000 and 1500, and secondary lights' energy is set between 200 and 750.
-
-    The location of each light is randomly chosen within a specified range.
+    The function performs the following steps:
+        1. Randomly determines the number of lights (between 1 and 3).
+        2. If there is only one object, sets the light around that object.
+        3. If there are multiple objects, sets the light around the center of the first two objects.
+        4. Creates light objects with random types and colors.
+        5. Sets the energy of the lights, with the main light having higher energy.
+        6. Sets the location of the lights around the objects within a specified radius and elevation range.
     """
     # Randomize lighting conditions
     num_lights = random.randint(1, 3)
+    # In the case of only one object, set the light around the object
     obj1_location = objects[0].get_location()
     center_location = obj1_location
     radius_min, radius_max = 40, 60
-    if len(objects) >= 2:  # If there are two objects
+
+    # In the case of more than one object, set the light around the center of the first two objects
+    if len(objects) >= 2:
         obj2_location = objects[1].get_location()
         # Calculate center and distance between objects
         center_location = (obj1_location + obj2_location) / 2
 
     for i in range(num_lights):
+        # Create a light object and set its type and color.
         light = bproc.types.Light()
         light_types = ["POINT", "SUN", "SPOT", "AREA"]
         light.set_type(random.choice(light_types))
         light.set_color(np.random.uniform([0.5, 0.5, 0.5], [1.0, 1.0, 1.0]))
-        if num_lights == 1:  # Only one main light
+
+        if num_lights == 1:  # If there is only one main light, set the energy to a high value.
             lower, upper = 500, 1000
-        elif i == 0:  # Main light, when there are others.
+        elif i == 0:  # Set the energy of the main light to a higher value, when there are other lights in the scene.
             lower, upper = 800, 1000
-        else:  # Secondary lights.
+        else:  # Set the energy of the additional lights to a lower value.
             lower, upper = 200, 500
         light.set_energy(random.uniform(lower, upper))
+
+        # Set the location of the light around the objects
         light.set_location(bproc.sampler.shell(
                                             center=center_location,
                                             radius_min=radius_min,
@@ -230,17 +343,29 @@ def set_lights(objects):
                                             elevation_min=1,
                                             elevation_max=90
                                             ))
-        # light.set_location(np.random.uniform([-5, -5, 5], [5, 5, 10]))
 
 
-# Load the camera parameters from json file
 def load_camera_parameters(json_path):
+    """ Load the camera parameters from json file. """
     with open(json_path, 'r') as f:
         camera_params = json.load(f)
     return camera_params
 
 
 def initial_camera_setup():
+    """
+    Sets up the initial camera parameters for the synthetic data generation.
+    This function loads the camera parameters from a JSON file, extracts the intrinsic
+    camera parameters (focal lengths and principal point), and sets up the camera
+    intrinsics using these parameters.
+
+    The camera parameters are expected to be in a JSON file named 'camera.json' located
+    in the resources directory.
+
+    Raises:
+        FileNotFoundError: If the 'camera.json' file is not found in the resources directory.
+        KeyError: If any of the required camera parameters are missing in the JSON file.
+    """
     # Load camera parameters from camera.json
     camera_params = load_camera_parameters(os.path.join(resources_dir, "camera.json"))
 
@@ -258,15 +383,20 @@ def initial_camera_setup():
 
 
 def sample_hdri_background():
+    """
+    Randomly selects and sets an HDRI background image for the Blender scene.
+
+    Raises:
+        FileNotFoundError: If the HDRI directory or image file does not exist.
+    """
     # Randomly choose and set a background image from the HDRI directory
     img_directory = os.path.join(hdri_dir, random.choice(os.listdir(hdri_dir)))  # Choose a random hdri directory (that contains the image)
     img_name = random.choice(os.listdir(img_directory))  # Take the image from the chosen directory.
                                                          # The randomization is to avoid errors if the images within the folder have a different name,
                                                          # or if the folder contains more than one image file.
     img_path = os.path.join(img_directory, img_name)
-    # img_path = os.path.join(hdri_dir, "abandoned_bakery/abandoned_bakery_2k.hdr")  # Pizza image
 
-    # Ensures that the world has a node tree
+    # Ensures that the world has a node tree (for error-checking purposes).
     world = bpy.context.scene.world
     if world.node_tree is None:
         world.use_nodes = True  # Enable node tree if it's not set
@@ -278,30 +408,26 @@ def sample_hdri_background():
 
 def sampling_camera_position(objects, camera_tries, camera_successes):
     """
-    Samples a camera position around given objects and adds the camera pose if the objects are visible.
+    Samples a camera position around given objects and updates the camera pose if the objects are visible.
 
-    Args:
-        objects (list): A list of objects to be considered for camera positioning. 
-                        The objects should have a method `get_location()` that returns their location.
-        camera_tries (int): The number of attempts made to sample a valid camera position.
-        camera_successes (int): The number of successful camera positions where the objects are visible.
+    Parameters:
+    objects (list): A list of objects around which the camera position is to be sampled. Each object should have a `get_location` method.
+    camera_tries (int): The number of attempts made to sample a camera position.
+    camera_successes (int): The number of successful camera positions where the objects are visible.
 
     Returns:
-        tuple: Updated values of `camera_tries` and `camera_successes`.
-
-    Notes:
-        - The function recursively calls itself if the sampled camera position does not make the objects visible.
-        - The camera position is sampled within a spherical shell defined by `radius_min` and `radius_max` around the center location.
-        - The center location is between the first two objects if there are at least two objects, otherwise it is the location of the first object.
-        - The function uses `bproc.sampler.shell` to sample the camera location and `bproc.camera.rotation_from_forward_vec` to compute the rotation matrix.
-        - The camera pose is added using `bproc.camera.add_camera_pose` if the objects are visible from the sampled position.
+    tuple: A tuple containing updated values of camera_tries, camera_successes, and a flag indicating if the camera position was successfully added.
     """
     flag = True
     camera_tries += 1
+
+    # In the case of only one object, set the camera around the object
     obj1_location = objects[0].get_location()
     center_location = obj1_location
     radius_min, radius_max = 10, 30
-    if len(objects) >= 2:  # If there are two objects
+
+    # In the case of more than one object, set the camera around the center of the first two objects
+    if len(objects) >= 2:
         obj2_location = objects[1].get_location()
         # Calculate center and distance between objects
         center_location = (obj1_location + obj2_location) / 2
@@ -309,7 +435,7 @@ def sampling_camera_position(objects, camera_tries, camera_successes):
         # Set radius based on object distance
         radius_max = max(distance_between_objects * 3, 30)
 
-    # Sample random camera location around the object
+    # Sample random camera location that's around the object.
     location = bproc.sampler.shell(
         center=center_location,
         radius_min=radius_min,
@@ -329,85 +455,48 @@ def sampling_camera_position(objects, camera_tries, camera_successes):
         bproc.camera.add_camera_pose(cam2world_matrix)
         camera_successes += 1
     else:
-        # camera_tries, camera_successes = sampling_camera_position(objects, camera_tries, camera_successes)
         flag = False
     return camera_tries, camera_successes, flag
 
 
-def preprocess_instance_segmaps(instance_segmaps):
-    """
-    Preprocess instance segmentation maps to ensure correct contour format for COCO writer.
-    
-    :param instance_segmaps: List of binary masks (numpy arrays)
-    :return: List of polygons for COCO annotations
-    """
-    processed_polygons = []
-    for binary_mask in instance_segmaps:
-        contours = measure.find_contours(binary_mask, 0.5)
-        # Convert each contour to a list of points
-        contours_list = [contour.tolist() for contour in contours]
-        processed_polygons.append(contours_list)
-    
-    return processed_polygons
-
-
 def convert_hdf5_to_images(hdf5_format_dir, jpg_format_dir):
     """
-    Converts HDF5 files containing image data to JPEG format and saves them.
+    Converts HDF5 files containing image data to JPEG format.
+    This function reads HDF5 files from the specified directory, extracts the 'colors' and 
+    'category_id_segmaps' datasets, and saves them as JPEG images in the specified output directory.
+
     Args:
-        hdf5_format_dir (str): Directory containing the HDF5 files.
-        jpg_format_dir (str): Directory where the JPEG images will be saved.
-    The function expects each HDF5 file to contain two datasets:
-        - 'colors': RGB image data.
-        - 'instance_segmaps': Segmentation maps.
-    For each HDF5 file in the input directory, the function:
-        1. Reads the 'colors' dataset and saves it as a JPEG image.
-        2. Reads the 'instance_segmaps' dataset, normalizes it, applies a colormap,
-           and saves it as a JPEG image.
+        hdf5_format_dir (str): The directory containing the HDF5 files.
+        jpg_format_dir (str): The directory where the JPEG images will be saved.
+
+    Raises:
+        FileNotFoundError: If the specified HDF5 file does not exist.
+        KeyError: If the required datasets ('colors' or 'category_id_segmaps') are not found in the HDF5 file.
+        OSError: If there is an error in creating directories or saving images.
     """
     for i in range(len(os.listdir(hdf5_format_dir))):
+        # Load the HDF5 file
         file = str(i) + ".hdf5"
         file_path = os.path.join(hdf5_format_dir, file)
+        # Create the directory that will contain the JPEG images, and set the file paths.
         os.makedirs(jpg_format_dir, exist_ok=True)
         colors_dir = os.path.join(jpg_format_dir, str(i) + "_color.jpg")
         segmaps_dir = os.path.join(jpg_format_dir, str(i) + "_segmaps.jpg")
+
         with h5py.File(file_path, 'r') as file:
+            # Read the 'colors' dataset and save it as a JPEG image.
             colors = file['colors'][:]
             color_img = Image.fromarray(colors, 'RGB')
             color_img.save(colors_dir, "JPEG")
             
-            segmaps = file['instance_segmaps'][:]
-            # Normalize or map to a color range for visibility
+            # Read the 'category_id_segmaps' dataset.
+            segmaps = file['category_id_segmaps'][:]
+            # Normalize and map the segmaps to a color range for visibility.
             segmaps_normalized = (segmaps - segmaps.min()) / (segmaps.max() - segmaps.min())
             segmaps_colormap = (cm.viridis(segmaps_normalized)[:, :, :3] * 255).astype(np.uint8)
-            
+            # Save the segmaps as a JPEG image.
             segmaps_img = Image.fromarray(segmaps_colormap)
             segmaps_img.save(segmaps_dir, "JPEG")
-
-
-def paste_coco_backgrounds(no_background_images_dir):
-    """
-    Pastes images from a directory onto random COCO backgrounds and saves them.
-
-    Args:
-        no_background_images_dir (str): The directory containing images without backgrounds.
-    """
-    # Iterate over each image in the given directory
-    for image in os.listdir(no_background_images_dir):
-        # if "color" not in image:
-        #     continue
-        image_path = os.path.join(no_background_images_dir, image)
-        img = Image.open(image_path)
-
-        # Choose a random background from the COCO directory
-        chosen_background = random.choice(os.listdir(coco_dir))
-        background = Image.open(os.path.join(coco_dir, chosen_background))
-        # Resize the background to match the size of the original image
-        background = background.resize(img.size)
-
-        background.paste(img, mask=img.convert('RGBA'))
-        # Save the new image back to the original path, overriding the background-less image
-        background.save(os.path.join(with_background_dir, image))
 
 
 def main(args):
@@ -421,46 +510,32 @@ def main(args):
 
     # Set up scene: background, lighting, and instruments
     camera_tries, camera_successes = 0, 0
-    is_hdri = True
     while (camera_tries < 10000) and (camera_successes < args.num_images):  # Generate specified number of images
-        # print("\nCamera tries:", camera_tries, "Camera successes:", camera_successes, "\n")
         # Clear all key frames from the previous run
         bproc.utility.reset_keyframes()
         bproc.clean_up()
 
-        # Load the surgical instruments
-        needle_holder_obj, tweezers_obj = load_instruments()
+        # Load the surgical instruments, set their appearance and location.
+        instruments = load_instruments()
+        for inst in instruments:
+            set_instruments_appearance_and_location(inst)
 
-        objects = list()
-        c = 0
-        def append_instruments(insts):
-            nonlocal c
-            for inst in insts:
-                if inst:
-                    c += 1
-                    objects.append(place_instruments(inst, c))
-        append_instruments([needle_holder_obj, tweezers_obj])
-
+        # Add additional objects to the scene that interact with the instruments.
         add_additional_objects()
         
-        # Set up lights in the scene
-        set_lights(objects)
+        # Set up lights in the scene.
+        set_lights(instruments)
         
-        # Set up initial camera parameters
+        # Set up initial camera parameters.
         initial_camera_setup()
         
-        # Choose a random background for the scene
-        # is_hdri = random.random() > 0.5
-        if is_hdri:
-            sample_hdri_background()
-            output_and_background_dir = output_hdri_dir
-        else:
-            output_and_background_dir = output_coco_dir
+        # Choose a random background for the scene.
+        sample_hdri_background()
         
         # Sample camera positions around the objects
         flag = False
         while not flag:
-            camera_tries, camera_successes, flag = sampling_camera_position(objects, camera_tries, camera_successes)
+            camera_tries, camera_successes, flag = sampling_camera_position(instruments, camera_tries, camera_successes)
         # Uncomment to add additional variations like blur or noise
         # further_complicate_image(objects)
 
@@ -469,15 +544,13 @@ def main(args):
         
         # Disable transparency so the background becomes opaque
         bproc.renderer.set_output_format(enable_transparency=False)
-        
-        # Enable segmentation masks (per class and per instance)
-        bproc.renderer.enable_segmentation_output(map_by=["category_id"])
+        print("boo")
+        objects = bproc.object.get_all_mesh_objects()
+        for obj in objects:
+            print(obj.get_cp("category_id"), obj.get_name())
 
-        """
-        # Uncomment to activate normal and depth rendering
-        bproc.renderer.enable_depth_output(activate_antialiasing=False)
-        bproc.renderer.enable_normals_output()
-        """
+        # Enable segmentation masks (per class and per instance)
+        bproc.renderer.enable_segmentation_output(map_by=['category_id'])
 
         bproc.renderer.set_denoiser("OPTIX")
         bproc.renderer.set_noise_threshold(0.05)
@@ -485,31 +558,12 @@ def main(args):
         # Render the image and segmentation mask
         data = bproc.renderer.render()
 
-        # Uncomment to preprocess instance segmentation maps before passing them to the COCO writer
-        # processed_instance_segmaps = preprocess_instance_segmaps(data["instance_segmaps"])
-        # processed_instance_segmaps = data["instance_segmaps"]
-        
-        # Uncomment to write data to COCO file
-        # try:
-        #     bproc.writer.write_coco_annotations(no_background_images_dir,
-        #                                         instance_segmaps=data["instance_segmaps"],
-        #                                         instance_attribute_maps=data["instance_attribute_maps"],
-        #                                         colors=data["colors"],
-        #                                         mask_encoding_format="polygon",
-        #                                         append_to_existing_output=True)
-        # except:
-        #     pass
-
-        # Save images and masks in HDF5 format
-        hdf5_format_dir = os.path.join(output_and_background_dir, 'hdf5_format/')
+        # Save images and masks in HDF5 format    
+        hdf5_format_dir = os.path.join(output_hdri_dir, 'hdf5_format/')
         bproc.writer.write_hdf5(hdf5_format_dir, data, append_to_existing_output=True)
 
     # Convert HDF5 files to JPEG format
     convert_hdf5_to_images(hdf5_format_dir, os.path.join(output_hdri_dir, 'jpg_format/'))
-    
-    # convert_hdf5_to_images(hdf5_format_dir, os.path.join(output_coco_dir, 'jpg_format/'))
-    # paste_coco_backgrounds(no_background_images_dir)
-    # paste_coco_backgrounds(os.path.join(no_background_images_dir, 'images/'))
 
 
 if __name__ == "__main__":

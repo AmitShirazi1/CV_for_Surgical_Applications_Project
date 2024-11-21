@@ -5,6 +5,10 @@ import segmentation_models_pytorch as smp
 import matplotlib.pyplot as plt
 import argparse
 import os
+import sys
+
+DEV_OUTPUT_PATH = "./model_developement/output_objects/"
+TEST_OUTPUT_PATH = "./domain_adaptation/output_objects/"
 
 # Function to predict on a new image
 def predict(image_path, output_dir):
@@ -48,11 +52,14 @@ def predict(image_path, output_dir):
     # Find the maximum value along dimension 0 (across the first axis)
     max_values, argmax_indices = softed_output.max(dim=0)
 
-    # Step 2: Check if the max values are greater than or equal to 0.7
-    mask = max_values >= 0.5
+    # Check if the max values are greater than or equal to 0.7
+    mask = max_values >= 0  # TODO: Check this value.
 
-    # Step 3: Set argmax indices to 0 where max value is less than 0.7
+    # Set argmax indices to 0 where max value is less than 0.7
     output_predictions = argmax_indices * mask.long()
+    print("\n", output_predictions)
+    print("\n", output_predictions.max())
+    print("\n", output_predictions.unique(), "\n")
 
     # Plot the results
     plt.figure(figsize=(10, 5))
@@ -67,8 +74,25 @@ def predict(image_path, output_dir):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--image_path", type=str, help="Path to the input image.\
-                        For example: './data_generation/output/hdri_background/jpg_format/0_color.jpg'")
-    parser.add_argument("-o", "--output_dir", type=str, default='./model_developement/output/', help="Path to the directory where the output image will be saved.\n\
-                        For example: './model_developement/output/'")
-    predict(parser.parse_args().image_path, parser.parse_args().output_dir)
+    parser.add_argument("-i", "--image_idx", type=int, help="Index of the image to predict.\
+                        For example: '-i 0' will predict on the first image.")
+    parser.add_argument("-o", "--output_dir", type=str, help="Path to the directory where the output image will be saved.\n\
+                        For example: f{DEV_OUTPUT_PATH}")
+    parser.add_argument("--dev", action="store_true", help="Use this flag to run the script in development mode.\
+                        This will use the output directory: f{DEV_OUTPUT_PATH}")
+    parser.add_argument("--test", action="store_true", help="Use this flag to run the script in test mode.\
+                        This will use the output directory: f{TEST_OUTPUT_PATH}")
+    args = parser.parse_args()
+
+    image_path = f"./data_generation/output_objects/hdri_background/jpg_format/{args.image_idx}_color.jpg"
+
+    if (args.output_dir is None) and (args.dev is False) and (args.test is False):
+        print("Please provide an output directory using the '-o' flag, or use --dev or --test.")
+        sys.exit(1)
+    if sum([bool(args.output_dir), args.dev, args.test]) > 1:
+        print("Please use only one of the '--dev', '--test' flags, or provide an output directory using the '-o' flag.")
+        sys.exit(1)
+    output_dir = args.output_dir if args.output_dir else DEV_OUTPUT_PATH if args.dev else TEST_OUTPUT_PATH
+    print("output_dir:", output_dir)
+
+    predict(image_path, output_dir)
