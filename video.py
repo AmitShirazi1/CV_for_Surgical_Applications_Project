@@ -101,7 +101,7 @@ def predict_video(video_path, output_dir):
         max_values = max_values.cpu().numpy()
 
         # Step 2: Check if the max values are greater than or equal to 0.7
-        mask = max_values >= 0  # TODO: Check this value.
+        mask = max_values >= 0.5  # TODO: Check this value.
 
         # Step 3: Set argmax indices to 0 where max value is less than 0.7
         output_predictions = argmax_indices.cpu() * np.long(mask)

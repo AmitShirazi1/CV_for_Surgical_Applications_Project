@@ -53,7 +53,7 @@ class SegmentationDataset(Dataset):
 def main(args):
     # Create the dataset and dataloader
     dataset = SegmentationDataset(args.images_path)
-    dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
+    dataloader = DataLoader(dataset, batch_size=64, shuffle=True)
     
     # Define the model, loss function, and optimizer
     model = smp.DeepLabV3Plus(encoder_name="resnet50", encoder_weights="imagenet", in_channels=3, classes=3)
@@ -64,7 +64,7 @@ def main(args):
     
     model_path = "./model_developement/deeplabv3_model_1000data.pth"
     # Training loop
-    for epoch in range(30):  # Train for 25 epochs
+    for epoch in range(50):  # Train for 25 epochs
         model.train()  # Set the model to training mode
         for images, masks in tqdm(dataloader):  # Iterate over batches of images and masks
             images, masks = images.to(device), masks.to(device)  # Move images and masks to the appropriate device
