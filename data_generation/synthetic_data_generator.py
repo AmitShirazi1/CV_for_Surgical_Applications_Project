@@ -7,11 +7,9 @@ import argparse
 import debugpy
 from colorsys import hsv_to_rgb
 import bpy
-from skimage import measure
 import h5py
 from PIL import Image
 import matplotlib.cm as cm
-import gc
 
 
 """
@@ -127,7 +125,7 @@ def create_path(path, dir_name):
     os.makedirs(path, exist_ok=True)
     return path
 # Output directory for generated data
-output_dir = create_path(current_file_dir, "output_objects/")
+output_dir = create_path(current_file_dir, "output_val/")
 output_hdri_dir = create_path(output_dir, 'hdri_background/')
 output_coco_dir = create_path(output_dir, 'coco_background/')
 no_background_images_dir = create_path(output_coco_dir, 'no_background/')
@@ -162,7 +160,7 @@ def load_instruments():
 
     Returns:
         list: A list of loaded instrument objects with assigned category IDs.
-    """    
+    """
     # Randomly choose an .obj file from the given directory
     def choose_obj_file(dir):
         return random.choice([os.path.join(dir, f) for f in os.listdir(dir) if f.endswith('.obj')])
@@ -228,7 +226,16 @@ def set_instruments_appearance_and_location(obj):
         
         # Set random shader values for the material
         try:
-            mat.set_principled_shader_value("Specular IOR Level", random.uniform(0, 1))
+            # mat.set_principled_shader_value("Specular IOR Level", random.uniform(0, 1))
+            mat.set_principled_shader_value("Specular IOR Level", random.uniform(0.8, 1.0))
+            bproc.renderer.set_light_bounces(
+                                            diffuse_bounces=3,         # Allow diffuse bounces for better light diffusion
+                                            glossy_bounces=5,          # Enhance glossy reflections for metallic surfaces
+                                            max_bounces=8,             # Total maximum number of bounces
+                                            transmission_bounces=5,    # Ensure light transmits through translucent areas (if any)
+                                            transparent_max_bounces=3, # Allow limited transparency bounces (if applicable)
+                                            volume_bounces=0           # Disable volumetric scattering unless you have smoke/fog
+                                            )
             mat.set_principled_shader_value("Roughness", 0.2)
             mat.set_principled_shader_value("Metallic", 1)
         except AttributeError:
@@ -236,8 +243,11 @@ def set_instruments_appearance_and_location(obj):
 
     # Set random location and rotation for the object
     obj.set_location(np.random.uniform([-2, -2, 0], [2, 2, 1]))
+    if obj.get_cp == 2:
+        obj.set_scale(np.random.uniform([0.5, 1, 0.5], [2, 3.5, 2]))
+    else:
+        obj.set_scale(np.random.uniform([0.5, 0.5, 0.5], [2, 2, 2]))
     obj.set_rotation_euler(np.random.uniform([0, 0, 0], [2*np.pi, 2*np.pi, 2*np.pi]))
-    obj.set_scale(np.random.uniform([0.5, 0.5, 0.5], [1, 1, 1]))
     obj.set_shading_mode(random.choice(["FLAT", "SMOOTH", "AUTO"]), angle_value=random.uniform(20, 45))
 
 
@@ -278,18 +288,26 @@ def add_additional_objects():
             random.uniform(0.05, 1)   # Scale factor for Z-axis
         ])
         
-        # Assign a random color, material and roughness to the object
+        # Assign a random material with properties influenced by the main objects
         obj_material = bproc.material.create("random_material")
-        obj_material.set_principled_shader_value("Base Color", [
-            random.uniform(0, 1),  # R
-            random.uniform(0, 1),  # G
-            random.uniform(0, 1),  # B
-            1.0                    # Alpha
-        ])
-        obj_material.set_principled_shader_value("Roughness", random.uniform(0.2, 0.6))
+        base_color = [
+            random.uniform(0.5, 1),  # R (brighter range for better lighting response)
+            random.uniform(0.5, 1),  # G
+            random.uniform(0.5, 1),  # B
+            1.0                      # Alpha
+        ]
+        obj_material.set_principled_shader_value("Base Color", base_color)
+        obj_material.set_principled_shader_value("Roughness", random.uniform(0.2, 0.5))
+        obj_material.set_principled_shader_value("Metallic", random.uniform(0.2, 0.8))  # Metallic finish for light interaction
+        
+        # Replace the object's material
         obj.replace_materials(obj_material)
+        
         # Assign the background category to the new objects by not setting the category ID
         obj.set_cp("category_id", 0)
+        
+        # Set shading mode for realism
+        obj.set_shading_mode(random.choice(["SMOOTH", "AUTO"]), angle_value=random.uniform(20, 45))
 
 
 def set_lights(objects):
@@ -325,7 +343,8 @@ def set_lights(objects):
         light = bproc.types.Light()
         light_types = ["POINT", "SUN", "SPOT", "AREA"]
         light.set_type(random.choice(light_types))
-        light.set_color(np.random.uniform([0.5, 0.5, 0.5], [1.0, 1.0, 1.0]))
+        # light.set_color(np.random.uniform([0.5, 0.5, 0.5], [1.0, 1.0, 1.0]))
+        light.set_color(np.random.uniform([0.9, 0.4, 0.2], [1.0, 0.5, 0.3]))  # Orange-red range
 
         if num_lights == 1:  # If there is only one main light, set the energy to a high value.
             lower, upper = 500, 1000
@@ -343,6 +362,7 @@ def set_lights(objects):
                                             elevation_min=1,
                                             elevation_max=90
                                             ))
+
 
 
 def load_camera_parameters(json_path):
@@ -536,18 +556,12 @@ def main(args):
         flag = False
         while not flag:
             camera_tries, camera_successes, flag = sampling_camera_position(instruments, camera_tries, camera_successes)
-        # Uncomment to add additional variations like blur or noise
-        # further_complicate_image(objects)
 
         # Set the maximum number of samples for rendering to speed up the process
         bproc.renderer.set_max_amount_of_samples(16)
         
         # Disable transparency so the background becomes opaque
         bproc.renderer.set_output_format(enable_transparency=False)
-        print("boo")
-        objects = bproc.object.get_all_mesh_objects()
-        for obj in objects:
-            print(obj.get_cp("category_id"), obj.get_name())
 
         # Enable segmentation masks (per class and per instance)
         bproc.renderer.enable_segmentation_output(map_by=['category_id'])

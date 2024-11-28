@@ -26,10 +26,11 @@ def apply_custom_colormap_with_transparency(mask, category_colors):
 
 
 # Function to process video frames
-def predict_video(video_path, output_dir):
-    model_path = "./model_developement/deeplabv3_model_1000data.pth"
-    output_path = os.path.join(output_dir, "video_pred.mp4")
+def predict_video(video_path, output_dir, model_path):
     os.makedirs(output_dir, exist_ok=True)
+    video_name = video_path.split('/')[-1]
+    video_name = video_name.split('.')[0]
+    output_path = os.path.join(output_dir, f"{video_name}_pred.mp4")
 
     # Initialize the model
     model = smp.DeepLabV3Plus(
@@ -140,23 +141,29 @@ if __name__ == "__main__":
                         For tunning, choose a file from dir: '/datashare/project/vids_tune/'.\n\
                         For testing, choose a file from dir: '/datashare/project/vids_test/'.")
     # For trying on a short video: /datashare/HW1/ood_video_data/surg_1.mp4
-    parser.add_argument("-o", "--output_dir", type=str, help="Path to the directory where the output video will be saved.\n\
+
+    parser.add_argument("-m", "--model_path", type=str, default="./model_developement/deeplabv3_model_tuned1.pth",
+                        help="Path to the model file.")
+    
+    parser.add_argument("-o", "--output_dir", type=str,
+                        help="Path to the directory where the output video will be saved.\n\
                         For example: f{DEV_OUTPUT_PATH}.")
-    parser.add_argument("--dev", action="store_true", help="Use this flag to run the script in development mode.\
+    
+    parser.add_argument("--dev", action="store_true",
+                        help="Use this flag to run the script in development mode.\
                         This will use the output directory: f{DEV_OUTPUT_PATH}")
-    parser.add_argument("--test", action="store_true", help="Use this flag to run the script in test mode.\
+    parser.add_argument("--test", action="store_true",
+                        help="Use this flag to run the script in test mode.\
                         This will use the output directory: f{TEST_OUTPUT_PATH}")
     args = parser.parse_args()
 
     if args.input_video_path is None:
-        print("Please provide the path to the input video using the '-v' flag.")
-        exit(1)
+        raise ValueError("Please provide a path to the input video using the '-v' flag.")
     if (args.output_dir is None) and (args.dev is False) and (args.test is False):
-        print("Please provide an output directory using the '-o' flag, or use --dev or --test.")
-        exit(1)
+        raise ValueError("Please provide an output directory using the '-o' flag, or use the '--dev' or '--test' flag.")
     if sum([bool(args.output_dir), args.dev, args.test]) > 1:
-        print("Please use only one of the '--dev', '--test' flags, or provide an output directory using the '-o' flag.")
-        exit(1)
+        raise ValueError("Please provide only one of the following: '-o', '--dev', '--test'.")
+    
     output_dir = args.output_dir if args.output_dir else DEV_OUTPUT_PATH if args.dev else TEST_OUTPUT_PATH
 
-    predict_video(args.input_video_path, output_dir)
+    predict_video(args.input_video_path, output_dir, args.model_path)

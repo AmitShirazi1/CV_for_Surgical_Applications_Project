@@ -10,7 +10,7 @@ import h5py
 from tqdm import tqdm
 
 
-class SegmentationDataset(Dataset):
+class SegmentationDatasetLongTweezers(Dataset):
     """
     A custom Dataset class for loading and transforming segmentation datasets stored in HDF5 files.
 
@@ -28,7 +28,7 @@ class SegmentationDataset(Dataset):
         self.images_paths = sorted(
                                     glob.glob(f"{images_path}/*.hdf5"),
                                     key=lambda x: int(x.split('/')[-1].split('.')[0])
-                                    )[1509:]
+                                    )
         # define the transformations
         self.images_transform = transforms.Compose([
                                 transforms.ToTensor(),
@@ -55,19 +55,22 @@ class SegmentationDataset(Dataset):
 
 def main(args):
     # Create the dataset and dataloader
-    dataset = SegmentationDataset(args.images_path)
+    dataset = SegmentationDatasetLongTweezers(args.images_path)
     dataloader = DataLoader(dataset, batch_size=64, shuffle=True)
     
     # Define the model, loss function, and optimizer
     model = smp.DeepLabV3Plus(encoder_name="resnet50", encoder_weights="imagenet", in_channels=3, classes=3)
+    tuned_model_path = "./model_developement/deeplabv3_model_long_tweezers.pth"
+    model.load_state_dict(torch.load(tuned_model_path))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)  # Move model to the appropriate device (GPU or CPU)
     criterion = nn.CrossEntropyLoss()  # Use CrossEntropyLoss for multi-class segmentation
-    optimizer = optim.Adam(model.parameters(), lr=0.001)  # Use Adam optimizer with learning rate 0.001
+    optimizer = optim.Adam(model.parameters(), lr=0.0001)  # Use Adam optimizer with learning rate 0.001
     
-    model_path = "./model_developement/deeplabv3_model_long_tweezers.pth"
+    
+
     # Training loop
-    for epoch in range(50):
+    for epoch in range(10):  # Train for 25 epochs
         model.train()  # Set the model to training mode
         for images, masks in tqdm(dataloader):  # Iterate over batches of images and masks
             images, masks = images.to(device), masks.to(device)  # Move images and masks to the appropriate device
@@ -83,9 +86,10 @@ def main(args):
         print(f"Epoch {epoch+1}, Loss: {loss.item()}")
 
     # Save the trained model to a file
-    torch.save(model.state_dict(), model_path)
+    tuned_model_path2 = "./model_developement/deeplabv3_model_red.pth"
+    torch.save(model.state_dict(), tuned_model_path2)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('-i', '--images_path', type=str, default='./data_generation/output_objects/hdri_background/hdf5_format/', help='Path to hdf5 images directory')
+    parser.add_argument('-i', '--images_path', type=str, default='./data_generation/output_red/hdri_background/hdf5_format/', help='Path to hdf5 images directory')
     main(parser.parse_args())

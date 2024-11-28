@@ -7,14 +7,14 @@ import argparse
 import os
 import sys
 
-DEV_OUTPUT_PATH = "./model_developement/output_objects/"
-TEST_OUTPUT_PATH = "./domain_adaptation/output_objects/"
+DEV_OUTPUT_PATH = "./model_developement/output_val/"
+TEST_OUTPUT_PATH = "./domain_adaptation/output_val/"
 
 # Function to predict on a new image
-def predict(image_path, output_dir):
-    model_path = "./model_developement/deeplabv3_model_1000data.pth"
-    output_path = os.path.join(output_dir, "image_pred.jpg")
+def predict(image_idx, output_dir, model_path):
+    image_path = f"./data_generation/output_objects/hdri_background/jpg_format/{image_idx}_color.jpg"
     os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, f"image{image_idx}_pred.jpg")
 
     model = smp.DeepLabV3Plus(
         encoder_name="resnet50",
@@ -57,9 +57,6 @@ def predict(image_path, output_dir):
 
     # Set argmax indices to 0 where max value is less than 0.7
     output_predictions = argmax_indices * mask.long()
-    print("\n", output_predictions)
-    print("\n", output_predictions.max())
-    print("\n", output_predictions.unique(), "\n")
 
     # Plot the results
     plt.figure(figsize=(10, 5))
@@ -71,28 +68,33 @@ def predict(image_path, output_dir):
     plt.title('Predicted Segmentation')
     plt.savefig(output_path)
 
+    print(f"Prediction image saved at: {output_path}")
+
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--image_idx", type=int, help="Index of the image to predict.\
-                        For example: '-i 0' will predict on the first image.")
-    parser.add_argument("-o", "--output_dir", type=str, help="Path to the directory where the output image will be saved.\n\
-                        For example: f{DEV_OUTPUT_PATH}")
-    parser.add_argument("--dev", action="store_true", help="Use this flag to run the script in development mode.\
-                        This will use the output directory: f{DEV_OUTPUT_PATH}")
-    parser.add_argument("--test", action="store_true", help="Use this flag to run the script in test mode.\
-                        This will use the output directory: f{TEST_OUTPUT_PATH}")
-    args = parser.parse_args()
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument("-i", "--image_idx", type=int,
+    #                     help="Index of the image to predict.\
+    #                     For example: '-i 0' will predict on the first image.")
+    # parser.add_argument("-m", "--model_path", type=str, default="./model_developement/deeplabv3_model_long_tweezers2.pth",
+    #                     help="Path to the model file.")
+    # parser.add_argument("-o", "--output_dir", type=str,
+    #                     help="Path to the directory where the output image will be saved.\n\
+    #                     For example: f{DEV_OUTPUT_PATH}")
+    # parser.add_argument("--dev", action="store_true",
+    #                     help="Use this flag to run the script in development mode.\
+    #                     This will use the output directory: f{DEV_OUTPUT_PATH}")
+    # parser.add_argument("--test", action="store_true",
+    #                     help="Use this flag to run the script in test mode.\
+    #                     This will use the output directory: f{TEST_OUTPUT_PATH}")
+    # args = parser.parse_args()
 
-    image_path = f"./data_generation/output_objects/hdri_background/jpg_format/{args.image_idx}_color.jpg"
+    # if (args.output_dir is None) and (args.dev is False) and (args.test is False):
+    #     raise ValueError("Please provide an output directory using the '-o' flag, or use the '--dev' or '--test' flag.")
+    # if sum([bool(args.output_dir), args.dev, args.test]) > 1:
+    #     raise ValueError("Please provide only one of the following: '-o', '--dev', or '--test'.")
+    # output_dir = args.output_dir if args.output_dir else DEV_OUTPUT_PATH if args.dev else TEST_OUTPUT_PATH
 
-    if (args.output_dir is None) and (args.dev is False) and (args.test is False):
-        print("Please provide an output directory using the '-o' flag, or use --dev or --test.")
-        sys.exit(1)
-    if sum([bool(args.output_dir), args.dev, args.test]) > 1:
-        print("Please use only one of the '--dev', '--test' flags, or provide an output directory using the '-o' flag.")
-        sys.exit(1)
-    output_dir = args.output_dir if args.output_dir else DEV_OUTPUT_PATH if args.dev else TEST_OUTPUT_PATH
-    print("output_dir:", output_dir)
-
-    predict(image_path, output_dir)
+    # predict(args.image_idx, output_dir, args.model_path)
+    for i in range(149):
+        predict(i, DEV_OUTPUT_PATH, "./model_developement/deeplabv3_model_long_tweezers.pth")
