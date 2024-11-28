@@ -66,8 +66,6 @@ def main(args):
     model = model.to(device)  # Move model to the appropriate device (GPU or CPU)
     criterion = nn.CrossEntropyLoss()  # Use CrossEntropyLoss for multi-class segmentation
     optimizer = optim.Adam(model.parameters(), lr=0.0001)  # Use Adam optimizer with learning rate 0.001
-    
-    
 
     # Training loop
     for epoch in range(10):  # Train for 25 epochs

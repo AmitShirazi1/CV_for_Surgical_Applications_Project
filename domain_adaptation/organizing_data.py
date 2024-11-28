@@ -37,9 +37,10 @@ def copy_and_split_folder_with_images(src_folder, dest_folder, direction="A", tr
     def copy_files(files, dest_folder):
         # Copy files to the respective folders
         for file_name in files:
+            new_name = str(len(os.listdir(dest_folder))) + '.jpg'
             if not file_name.split('_')[-1].startswith('color'):
                 continue
-            shutil.copy2(os.path.join(src_folder, file_name), os.path.join(dest_folder, "0"+file_name))
+            shutil.copy2(os.path.join(src_folder, file_name), os.path.join(dest_folder, new_name))
 
     copy_files(train_files, train_folder)
     copy_files(test_files, test_folder)
@@ -98,14 +99,14 @@ def extract_frames(video_path, tuning_output_dir, testing_output_dir, split_rati
     return saved_tuning_count, saved_testing_count
 
 
-def copy_and_split_video_frames(video_path, direction="B", output_dir="./data/", fps=1, saved_tuning_count=0, saved_testing_count=0):
+def copy_and_split_video_frames(video_path, direction="B", output_dir="./data/", fps=2, saved_tuning_count=0, saved_testing_count=0):
     os.makedirs(output_dir, exist_ok=True)
     # Ensure output directories exist
     tuning_output_dir = os.path.join(output_dir, f"train{direction}")
     os.makedirs(tuning_output_dir, exist_ok=True)
     testing_output_dir = os.path.join(output_dir, f"test{direction}")
     os.makedirs(testing_output_dir, exist_ok=True)
-    return extract_frames(video_path, tuning_output_dir, testing_output_dir, split_ratio=0.8, fps=fps, saved_tuning_count=saved_tuning_count, saved_testing_count=saved_testing_count)
+    return extract_frames(video_path, tuning_output_dir, testing_output_dir, split_ratio=0.7, fps=fps, saved_tuning_count=saved_tuning_count, saved_testing_count=saved_testing_count)
 
 
 if __name__ == "__main__":

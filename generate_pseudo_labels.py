@@ -51,8 +51,8 @@ def create_folder_for_predictions(output_path):
 
 
 def postprocess_output(output, original_size):
-    output = torch.argmax(output.squeeze(), dim=0).detach().cpu().numpy()
-    output = cv2.resize(output.astype(np.uint8), original_size)  # Resize back to original size
+    # Resize back to original size
+    output = cv2.resize(output.cpu().numpy().astype(np.uint8), original_size, interpolation=cv2.INTER_NEAREST)
     return output
 
 
@@ -81,12 +81,14 @@ def predict_video(video_path, output_dir, model_path):
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
 
+    colored_pixels = []
     frame_count = 0
     while video_cap.isOpened():
+        print(frame_count)
         ret, frame = video_cap.read()
         if not ret:
             break
-
+        
         pil_image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
         input_tensor = preprocess(pil_image)
         input_batch = input_tensor.unsqueeze(0)
@@ -99,15 +101,19 @@ def predict_video(video_path, output_dir, model_path):
         max_values = max_values.cpu().numpy()
         mask = max_values >= 0  # TODO: Check this value.
         output_predictions = argmax_indices.cpu() * np.long(mask)
+        if torch.sum(output_predictions != 0).item() > 190:
+            segmentation = postprocess_output(output_predictions, (width, height))
 
-        segmentation = postprocess_output(output_predictions, (width, height))
-
-        hdf5_file_path = os.path.join(pred_folder_path, f"frame_{frame_count}.h5")
-        with h5py.File(hdf5_file_path, "w") as hdf5_file:
-            hdf5_file.create_dataset("frame", data=frame, compression="gzip")
-            hdf5_file.create_dataset("segmentation", data=segmentation, compression="gzip")
+            hdf5_file_path = os.path.join(pred_folder_path, f"frame_{frame_count}.h5")
+            with h5py.File(hdf5_file_path, "w") as hdf5_file:
+                hdf5_file.create_dataset("frame", data=pil_image, compression="gzip")
+                hdf5_file.create_dataset("segmentation", data=segmentation, compression="gzip")
         frame_count += 1
-
+        # if frame_count == 100:
+        #     colored_pixels.sort()
+        #     print(colored_pixels[50], colored_pixels[60], colored_pixels[70])
+        #     break
+        
     video_cap.release()
 
     # Get video properties
@@ -121,7 +127,8 @@ def predict_video(video_path, output_dir, model_path):
 
 if __name__ == "__main__":
     output_dir = OUTPUT_PATH
-    input_video_path = '/datashare/HW1/ood_video_data/surg_1.mp4'
-    model_path = 'model_developement/deeplabv3_model_long_tweezers.pth'
+    input_video_path = '/datashare/project/vids_tune/4_2_24_B_2.mp4'
+    input_video_path2 = '/datashare/project/vids_tune/20_2_24_1.mp4'
+    model_path = 'model_developement/deeplabv3_model.pth'
 
     predict_video(input_video_path, output_dir, model_path)
