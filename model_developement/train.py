@@ -28,7 +28,7 @@ class SegmentationDataset(Dataset):
         self.images_paths = sorted(
                                     glob.glob(f"{images_path}/*.hdf5"),
                                     key=lambda x: int(x.split('/')[-1].split('.')[0])
-                                    )[1509:]
+                                    )
         # define the transformations
         self.images_transform = transforms.Compose([
                                 transforms.ToTensor(),
@@ -65,7 +65,6 @@ def main(args):
     criterion = nn.CrossEntropyLoss()  # Use CrossEntropyLoss for multi-class segmentation
     optimizer = optim.Adam(model.parameters(), lr=0.001)  # Use Adam optimizer with learning rate 0.001
     
-    model_path = "./model_developement/deeplabv3_model_long_tweezers.pth"
     # Training loop
     for epoch in range(50):
         model.train()  # Set the model to training mode
@@ -83,9 +82,10 @@ def main(args):
         print(f"Epoch {epoch+1}, Loss: {loss.item()}")
 
     # Save the trained model to a file
-    torch.save(model.state_dict(), model_path)
+    torch.save(model.state_dict(), args.model_path)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('-i', '--images_path', type=str, default='./data_generation/output_objects/hdri_background/hdf5_format/', help='Path to hdf5 images directory')
+    parser.add_argument('-i', '--images_path', type=str, default='./data_generation/output/hdf5_format/', help='Path to hdf5 images directory')
+    parser.add_argument('-m', '--model_path', type=str, default='./model_developement/deeplabv3_model.pth', help='Path to save the trained model')
     main(parser.parse_args())
