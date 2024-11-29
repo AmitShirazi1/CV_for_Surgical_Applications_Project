@@ -12,7 +12,7 @@ from PIL import Image
 import matplotlib.cm as cm
 
 
-# Set the path for 3D models, background images, and HDRI files
+# Set the path for 3D models and HDRI files
 resources_dir = "/datashare/project/"
 
 # Directory for surgical tools models
@@ -20,8 +20,7 @@ models_dir = os.path.join(resources_dir, "surgical_tools_models/")
 needle_holder_model_dir = os.path.join(models_dir, "needle_holder/")
 tweezers_model_dir = os.path.join(models_dir, "tweezers/")
 
-# Directories for background images and HDRI files
-coco_dir = os.path.join(resources_dir, "train2017/")
+# Directories for background images
 hdri_dir = os.path.join(resources_dir, "haven/hdris/")
 
 # Directory for the current file
@@ -33,10 +32,6 @@ def create_path(path, dir_name):
     return path
 # Output directory for generated data
 output_dir = create_path(current_file_dir, "output/")
-output_hdri_dir = create_path(output_dir, 'hdri_background/')
-output_coco_dir = create_path(output_dir, 'coco_background/')
-no_background_images_dir = create_path(output_coco_dir, 'no_background/')
-with_background_dir = create_path(output_coco_dir, 'with_background/')
 
 # Loading the 3D models of surgical instruments
 def load_all_instruments():
@@ -458,11 +453,11 @@ def main(args):
         data = bproc.renderer.render()
 
         # Save images and masks in HDF5 format    
-        hdf5_format_dir = os.path.join(output_hdri_dir, 'hdf5_format/')
+        hdf5_format_dir = os.path.join(output_dir, 'hdf5_format/')
         bproc.writer.write_hdf5(hdf5_format_dir, data, append_to_existing_output=True)
 
     # Convert HDF5 files to JPEG format
-    convert_hdf5_to_images(hdf5_format_dir, os.path.join(output_hdri_dir, 'jpg_format/'))
+    convert_hdf5_to_images(hdf5_format_dir, os.path.join(output_dir, 'jpg_format/'))
 
 
 if __name__ == "__main__":
