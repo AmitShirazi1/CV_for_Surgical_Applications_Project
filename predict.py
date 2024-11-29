@@ -11,9 +11,10 @@ TEST_OUTPUT_PATH = "./domain_adaptation/predictions/"
 
 
 # Function to predict on a new image
-def predict(image_path, output_dir, model_path):
-    os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, os.path.basename(image_path).replace("color.jpg", "pred.jpg"))
+def predict(image_path, output_dir, model_path, save_output=True):
+    if save_output:
+        os.makedirs(output_dir, exist_ok=True)
+        output_path = os.path.join(output_dir, os.path.basename(image_path).replace("color.jpg", "pred.jpg"))
 
     model = smp.DeepLabV3Plus(
         encoder_name="resnet50",
@@ -57,17 +58,20 @@ def predict(image_path, output_dir, model_path):
     # Set argmax indices to 0 where max value is less than threshold
     output_predictions = argmax_indices * mask.long()
 
-    # Plot the results
-    plt.figure(figsize=(10, 5))
-    plt.subplot(1, 2, 1)
-    plt.imshow(input_image)
-    plt.title('Input Image')
-    plt.subplot(1, 2, 2)
-    plt.imshow(output_predictions.cpu().numpy())
-    plt.title('Predicted Segmentation')
-    plt.savefig(output_path)
+    if save_output:
+        # Plot the results
+        plt.figure(figsize=(10, 5))
+        plt.subplot(1, 2, 1)
+        plt.imshow(input_image)
+        plt.title('Input Image')
+        plt.subplot(1, 2, 2)
+        plt.imshow(output_predictions.cpu().numpy())
+        plt.title('Predicted Segmentation')
+        plt.savefig(output_path)
 
-    print(f"Prediction image saved at: {output_path}")
+        print(f"Prediction image saved at: {output_path}")
+    else:
+        return output_predictions
 
 
 if __name__ == "__main__":

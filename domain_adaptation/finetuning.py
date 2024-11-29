@@ -10,6 +10,11 @@ import glob
 from tqdm import tqdm
 import h5py
 from PIL import Image
+import sys
+
+# Add the parent folder to the Python path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from predict import predict
 
 
 class SegmentationDatasetPNGAndHDF5(Dataset):
@@ -26,10 +31,10 @@ class SegmentationDatasetPNGAndHDF5(Dataset):
         __len__(): Returns the number of samples in the dataset.
         __getitem__(idx): Loads and returns the image and mask at the specified index after applying the transformations.
     """
-    def __init__(self, images_dir, masks_dir):
+    def __init__(self, images_dir, masks):
         # Initialize the dataset with paths to the PNG images and HDF5 masks
-        self.images_paths = sorted(glob.glob(f"{images_dir}/*.png"))
-        self.masks_paths = [os.path.join(masks_dir, f"{int(os.path.basename(image_path).split('_')[0])}.hdf5") for image_path in self.images_paths]
+        self.images_paths = sorted(glob.glob(f"{images_dir}/*fake_B.png"))
+        self.masks = masks
 
         # Define the transformations
         self.images_transform = transforms.Compose([
@@ -44,32 +49,29 @@ class SegmentationDatasetPNGAndHDF5(Dataset):
 
     def __len__(self):
         # Ensure the number of images matches the number of masks
-        return min(len(self.images_paths), len(self.masks_paths))
+        return min(len(self.images_paths), len(self.masks))
 
     def __getitem__(self, idx):
         # Load the image from the PNG file
         image = Image.open(self.images_paths[idx]).convert("RGB")
 
-        # Load the mask from the HDF5 file
-        with h5py.File(self.masks_paths[idx], "r") as file:
-            mask = file['category_id_segmaps'][:]
-
         # Apply the transformations
         image = self.images_transform(image)
-        mask = self.masks_transform(mask)[0].long()  # Ensure mask is in long format for CrossEntropyLoss
+        mask = self.masks[idx].long()  # Ensure mask is in long format for CrossEntropyLoss
 
         return image, mask
 
 
 def main(args):
+    original_images = sorted(glob.glob(f"{args.images_dir}/*real_A.png"))
+    masks = [predict(image_path, None, args.models_path, save_output=False) for image_path in original_images]
     # Create the dataset and dataloader
-    dataset = SegmentationDatasetPNGAndHDF5(args.images_dir, args.masks_dir)
+    dataset = SegmentationDatasetPNGAndHDF5(args.images_dir, masks)
     dataloader = DataLoader(dataset, batch_size=64, shuffle=True)
 
     # Define the model, loss function, and optimizer
     model = smp.DeepLabV3Plus(encoder_name="resnet50", encoder_weights="imagenet", in_channels=3, classes=3)
-    tuned_model_path = "./model_developement/deeplabv3_model.pth"
-    model.load_state_dict(torch.load(tuned_model_path))
+    model.load_state_dict(torch.load(args.models_path))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)  # Move model to the appropriate device (GPU or CPU)
     criterion = nn.CrossEntropyLoss()  # Use CrossEntropyLoss for multi-class segmentation
@@ -98,10 +100,10 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('-i', '--images_dir', type=str, required=True, default="./results/synthetic2real/train_30/images",
+    parser.add_argument('-i', '--images_dir', type=str, default="./domain_adaptation/results/synthetic2real/train_latest/images",
                         help='Path to directory containing the PNG images')
-    parser.add_argument('-m', '--masks_dir', type=str, required=True, default="./data_generation/output/hdf5_format",
-                        help='Path to directory containing the HDF5 masks')
+    parser.add_argument('-m', '--models_path', type=str, default="./model_developement/deeplabv3_model.pth",
+                        help='Path to directory containing the trained model')
     main(parser.parse_args())
 
 

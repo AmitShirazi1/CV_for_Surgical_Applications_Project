@@ -105,7 +105,7 @@ def predict_video(video_path, output_dir, model_path):
         mask = max_values >= 0.5  # Change value if necessary.
 
         # Set argmax indices to 0 where max value is less than threshold
-        output_predictions = argmax_indices.cpu() * np.long(mask)
+        output_predictions = argmax_indices.cpu() * np.int64(mask)
 
         # Apply custom colormap with transparency
         color_mask = apply_custom_colormap_with_transparency(output_predictions, CATEGORY_COLORS)

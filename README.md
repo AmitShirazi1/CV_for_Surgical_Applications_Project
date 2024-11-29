@@ -13,7 +13,7 @@ Additionally, the project provides two utility scripts:
 - `predict.py`: For running segmentation on single images.
 - `video.py`: For applying segmentation on video frames.
 
-A link to the final model weights: 
+A link to the final model weights: [DeepLab v3 model](https://technionmail-my.sharepoint.com/:u:/g/personal/amit_shirazi_campus_technion_ac_il/EXX42tIxiX9EuAQMpDiua1kBdngZ3Y9QxEH3Ot80p7oP8w?e=S5hWbY)
 
 ---
 

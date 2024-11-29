@@ -1,17 +1,23 @@
 import segmentation_models_pytorch as smp
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 import torch.optim as optim
 import torch.nn as nn
 import argparse
 from tqdm import tqdm
 from train import SegmentationDataset
+import random
+from torch.utils.data import DataLoader, Subset
+
 
 
 def main(args):
     # Create the dataset and dataloader
     dataset = SegmentationDataset(args.images_path)
-    dataloader = DataLoader(dataset, batch_size=64, shuffle=True)
+    subset_indices = random.sample(range(len(dataset)), 500)
+    subset = Subset(dataset, subset_indices)
+
+    dataloader = DataLoader(subset, batch_size=64, shuffle=True)
     
     # Define the model, loss function, and optimizer
     model = smp.DeepLabV3Plus(encoder_name="resnet50", encoder_weights="imagenet", in_channels=3, classes=3)
@@ -43,7 +49,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('-i', '--images_path', type=str, default='./data_generation/output/hdf5_format/',
+    parser.add_argument('-i', '--images_path', type=str, default='./domain_adaptation/frame_predictions/frame_predictions',
                         help='Path to hdf5 images directory')
     parser.add_argument('-m', '--model_path', type=str, default='./model_developement/deeplabv3_model.pth',
                         help='The path to the model to be fine-tuned. The tuned model will be saved in the same directory with the suffix "_tuned"')
