@@ -12,99 +12,6 @@ from PIL import Image
 import matplotlib.cm as cm
 
 
-"""
-To run file:
-blenderproc run /home/student/project/data_generation/synthetic_data_generator.py -b
-
-To debug file:
-blenderproc run /home/student/project/data_generation/synthetic_data_generator.py -d
-
-If BlenderProc does the f**ing symbol error:
-conda install -c conda-forge libstdcxx-ng
-export LD_LIBRARY_PATH=/anaconda/envs/synth/lib:$LD_LIBRARY_PATH
-
-If the debugger refuses because the port is taken:
-lsof -i :5678
-Take the PID
-kill -9 <PID>
-
-
--------------- Trying COCO --------------
-
-def preprocess_instance_segmaps(instance_segmaps):
-    # Preprocess instance segmentation maps to ensure correct contour format for COCO writer.
-    
-    # :param instance_segmaps: List of binary masks (numpy arrays)
-    # :return: List of polygons for COCO annotations
-    processed_polygons = []
-    for binary_mask in instance_segmaps:
-        contours = measure.find_contours(binary_mask, 0.5)
-        # Convert each contour to a list of points
-        contours_list = [contour.tolist() for contour in contours]
-        processed_polygons.append(contours_list)
-    
-    return processed_polygons
-
-def paste_coco_backgrounds(no_background_images_dir):
-    # Pastes images from a directory onto random COCO backgrounds and saves them.
-
-    # Args:
-    #     no_background_images_dir (str): The directory containing images without backgrounds.
-    # Iterate over each image in the given directory
-    for image in os.listdir(no_background_images_dir):
-        # if "color" not in image:
-        #     continue
-        image_path = os.path.join(no_background_images_dir, image)
-        img = Image.open(image_path)
-
-        # Choose a random background from the COCO directory
-        chosen_background = random.choice(os.listdir(coco_dir))
-        background = Image.open(os.path.join(coco_dir, chosen_background))
-        # Resize the background to match the size of the original image
-        background = background.resize(img.size)
-
-        background.paste(img, mask=img.convert('RGBA'))
-        # Save the new image back to the original path, overriding the background-less image
-        background.save(os.path.join(with_background_dir, image))
-
-        
-In main:
-
-# Before while:
-is_hdri = True
-
-# In while, when choosing background:
-is_hdri = random.random() > 0.5
-if is_hdri:
-    sample_hdri_background()
-    output_and_background_dir = output_hdri_dir
-else:
-    output_and_background_dir = output_coco_dir
-
-# After rendering:
-# Uncomment to preprocess instance segmentation maps before passing them to the COCO writer
-processed_instance_segmaps = preprocess_instance_segmaps(data["instance_segmaps"])
-processed_instance_segmaps = data["instance_segmaps"]
-
-# Uncomment to write data to COCO file
-try:
-    bproc.writer.write_coco_annotations(no_background_images_dir,
-                                        instance_segmaps=data["instance_segmaps"],
-                                        instance_attribute_maps=data["instance_attribute_maps"],
-                                        colors=data["colors"],
-                                        mask_encoding_format="polygon",
-                                        append_to_existing_output=True)
-except:
-    pass
-
-# After while, after converting hdf5 to jpg:
-convert_hdf5_to_images(hdf5_format_dir, os.path.join(output_coco_dir, 'jpg_format/'))
-paste_coco_backgrounds(no_background_images_dir)
-paste_coco_backgrounds(os.path.join(no_background_images_dir, 'images/'))
-
-"""
-
-
 # Set the path for 3D models, background images, and HDRI files
 resources_dir = "/datashare/project/"
 
@@ -125,7 +32,7 @@ def create_path(path, dir_name):
     os.makedirs(path, exist_ok=True)
     return path
 # Output directory for generated data
-output_dir = create_path(current_file_dir, "output_val/")
+output_dir = create_path(current_file_dir, "output/")
 output_hdri_dir = create_path(output_dir, 'hdri_background/')
 output_coco_dir = create_path(output_dir, 'coco_background/')
 no_background_images_dir = create_path(output_coco_dir, 'no_background/')
@@ -226,16 +133,7 @@ def set_instruments_appearance_and_location(obj):
         
         # Set random shader values for the material
         try:
-            # mat.set_principled_shader_value("Specular IOR Level", random.uniform(0, 1))
-            mat.set_principled_shader_value("Specular IOR Level", random.uniform(0.8, 1.0))
-            bproc.renderer.set_light_bounces(
-                                            diffuse_bounces=3,         # Allow diffuse bounces for better light diffusion
-                                            glossy_bounces=5,          # Enhance glossy reflections for metallic surfaces
-                                            max_bounces=8,             # Total maximum number of bounces
-                                            transmission_bounces=5,    # Ensure light transmits through translucent areas (if any)
-                                            transparent_max_bounces=3, # Allow limited transparency bounces (if applicable)
-                                            volume_bounces=0           # Disable volumetric scattering unless you have smoke/fog
-                                            )
+            mat.set_principled_shader_value("Specular IOR Level", random.uniform(0, 1))
             mat.set_principled_shader_value("Roughness", 0.2)
             mat.set_principled_shader_value("Metallic", 1)
         except AttributeError:
@@ -243,10 +141,7 @@ def set_instruments_appearance_and_location(obj):
 
     # Set random location and rotation for the object
     obj.set_location(np.random.uniform([-2, -2, 0], [2, 2, 1]))
-    if obj.get_cp == 2:
-        obj.set_scale(np.random.uniform([0.5, 1, 0.5], [2, 3.5, 2]))
-    else:
-        obj.set_scale(np.random.uniform([0.5, 0.5, 0.5], [2, 2, 2]))
+    obj.set_scale(np.random.uniform([0.5, 0.5, 0.5], [1, 1, 1]))
     obj.set_rotation_euler(np.random.uniform([0, 0, 0], [2*np.pi, 2*np.pi, 2*np.pi]))
     obj.set_shading_mode(random.choice(["FLAT", "SMOOTH", "AUTO"]), angle_value=random.uniform(20, 45))
 
@@ -288,26 +183,18 @@ def add_additional_objects():
             random.uniform(0.05, 1)   # Scale factor for Z-axis
         ])
         
-        # Assign a random material with properties influenced by the main objects
+        # Assign a random color, material and roughness to the object
         obj_material = bproc.material.create("random_material")
-        base_color = [
-            random.uniform(0.5, 1),  # R (brighter range for better lighting response)
-            random.uniform(0.5, 1),  # G
-            random.uniform(0.5, 1),  # B
-            1.0                      # Alpha
-        ]
-        obj_material.set_principled_shader_value("Base Color", base_color)
-        obj_material.set_principled_shader_value("Roughness", random.uniform(0.2, 0.5))
-        obj_material.set_principled_shader_value("Metallic", random.uniform(0.2, 0.8))  # Metallic finish for light interaction
-        
-        # Replace the object's material
+        obj_material.set_principled_shader_value("Base Color", [
+            random.uniform(0, 1),  # R
+            random.uniform(0, 1),  # G
+            random.uniform(0, 1),  # B
+            1.0                    # Alpha
+        ])
+        obj_material.set_principled_shader_value("Roughness", random.uniform(0.2, 0.6))
         obj.replace_materials(obj_material)
-        
         # Assign the background category to the new objects by not setting the category ID
         obj.set_cp("category_id", 0)
-        
-        # Set shading mode for realism
-        obj.set_shading_mode(random.choice(["SMOOTH", "AUTO"]), angle_value=random.uniform(20, 45))
 
 
 def set_lights(objects):
@@ -343,8 +230,7 @@ def set_lights(objects):
         light = bproc.types.Light()
         light_types = ["POINT", "SUN", "SPOT", "AREA"]
         light.set_type(random.choice(light_types))
-        # light.set_color(np.random.uniform([0.5, 0.5, 0.5], [1.0, 1.0, 1.0]))
-        light.set_color(np.random.uniform([0.9, 0.4, 0.2], [1.0, 0.5, 0.3]))  # Orange-red range
+        light.set_color(np.random.uniform([0.5, 0.5, 0.5], [1.0, 1.0, 1.0]))
 
         if num_lights == 1:  # If there is only one main light, set the energy to a high value.
             lower, upper = 500, 1000
@@ -362,7 +248,6 @@ def set_lights(objects):
                                             elevation_min=1,
                                             elevation_max=90
                                             ))
-
 
 
 def load_camera_parameters(json_path):
@@ -585,4 +470,8 @@ if __name__ == "__main__":
     parser.add_argument('-b', '--blender', action='store_true', help="Run in Blender")
     parser.add_argument('-d', '--debug', action='store_true', help="Enable debugging")
     parser.add_argument('-n', '--num_images', type=int, default=1000, help="Number of images to generate")
-    main(parser.parse_args())
+
+    args = parser.parse_args()
+    if (not args.blender) and (not args.debug):
+        raise ValueError("Please specify either the Blender or Debug flag")
+    main(args)
