@@ -1,0 +1,11 @@
+torch==2.0.1
+torchvision==0.15.2
+segmentation-models-pytorch==0.3.0
+pytorch-fid
+opencv-python
+Pillow==9.5.0
+tqdm==4.68.0
+h5py==3.8.0
+argparse==1.4.0
+numpy==1.24.3
+glob2
