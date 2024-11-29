@@ -99,7 +99,7 @@ def extract_frames(video_path, tuning_output_dir, testing_output_dir, split_rati
     return saved_tuning_count, saved_testing_count
 
 
-def copy_and_split_video_frames(video_path, direction="B", output_dir="./data/", fps=2, saved_tuning_count=0, saved_testing_count=0):
+def copy_and_split_video_frames(video_path, direction="B", output_dir="./domain_adaptation/data/", fps=2, saved_tuning_count=0, saved_testing_count=0):
     os.makedirs(output_dir, exist_ok=True)
     # Ensure output directories exist
     tuning_output_dir = os.path.join(output_dir, f"train{direction}")
@@ -111,8 +111,8 @@ def copy_and_split_video_frames(video_path, direction="B", output_dir="./data/",
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('-s', '--source', default="../data_generation/output_objects/hdri_background/jpg_format/")
-    parser.add_argument('-d', '--destination', default="./data/")
+    parser.add_argument('-s', '--source', default="./data_generation/output/jpg_format/")
+    parser.add_argument('-d', '--destination', default="./domain_adaptation/data/")
     parser.add_argument('-r', '--train_ratio', default=0.8)
     args = parser.parse_args()
     copy_and_split_folder_with_images(args.source, args.destination, "A", float(args.train_ratio))

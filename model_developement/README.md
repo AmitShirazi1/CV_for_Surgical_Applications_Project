@@ -35,7 +35,7 @@ The training progress, including **train loss**, **validation loss**, and **vali
 ## Dependencies
 Don't forget to install required packages using:
    ```bash
-   pip install -r requirements.txt
+   pip install -r requirements/model_developement.txt
    ```
 
 **Key Libraries:**

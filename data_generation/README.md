@@ -53,7 +53,7 @@ The output includes:
 2. **Python Packages:**
    Don't forget to install required packages using:
    ```bash
-   pip install -r requirements.txt
+   pip install -r requirements/data_generation.txt
    ```
 
 3. **Resources:**

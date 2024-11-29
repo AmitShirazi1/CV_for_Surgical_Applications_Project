@@ -12,24 +12,6 @@ import h5py
 from PIL import Image
 
 
-def copy_adaptation_results(src_folder, dest_folder):
-    """
-    Copy the results of the CycleGAN adaptation process to a new folder.
-    
-    Args:
-        src_folder (str): Path to the source folder containing the CycleGAN results.
-        dest_folder (str): Path to the destination folder.
-    """
-    # Ensure the destination folder exists
-    os.makedirs(dest_folder, exist_ok=True)
-    
-    # Copy the results of the CycleGAN adaptation process
-    for file_name in os.listdir(src_folder):
-        shutil.copy2(os.path.join(src_folder, file_name), os.path.join(dest_folder, file_name))
-    
-    print(f"CycleGAN adaptation results copied to '{dest_folder}'")
-
-
 class SegmentationDatasetPNGAndHDF5(Dataset):
     """
     A custom Dataset class for loading PNG images and HDF5 masks.
@@ -86,7 +68,7 @@ def main(args):
 
     # Define the model, loss function, and optimizer
     model = smp.DeepLabV3Plus(encoder_name="resnet50", encoder_weights="imagenet", in_channels=3, classes=3)
-    tuned_model_path = "./model_developement/deeplabv3_model_long_tweezers.pth"
+    tuned_model_path = "./model_developement/deeplabv3_model.pth"
     model.load_state_dict(torch.load(tuned_model_path))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)  # Move model to the appropriate device (GPU or CPU)
@@ -94,7 +76,7 @@ def main(args):
     optimizer = optim.Adam(model.parameters(), lr=0.0001)  # Use Adam optimizer with learning rate 0.0001
 
     # Training loop
-    for epoch in range(10):  # Train for 10 epochs
+    for epoch in range(30):  # Train for 10 epochs
         model.train()  # Set the model to training mode
         for images, masks in tqdm(dataloader):  # Iterate over batches of images and masks
             images, masks = images.to(device), masks.to(device)  # Move images and masks to the appropriate device
@@ -110,7 +92,7 @@ def main(args):
         print(f"Epoch {epoch + 1}, Loss: {loss.item()}")
 
     # Save the trained model to a file
-    tuned_model_path2 = "./deeplabv3_model_adapted.pth"
+    tuned_model_path2 = "./domain_adaptation/deeplabv3_model_adapted.pth"
     torch.save(model.state_dict(), tuned_model_path2)
 
 
@@ -118,7 +100,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--images_dir', type=str, required=True, default="./results/synthetic2real/train_30/images",
                         help='Path to directory containing the PNG images')
-    parser.add_argument('-m', '--masks_dir', type=str, required=True, default="../data_generation/output_objects/hdri_background/hdf5_format",
+    parser.add_argument('-m', '--masks_dir', type=str, required=True, default="./data_generation/output/hdf5_format",
                         help='Path to directory containing the HDF5 masks')
     main(parser.parse_args())
 

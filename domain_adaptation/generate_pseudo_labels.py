@@ -83,31 +83,33 @@ def predict_video(video_path, output_dir, model_path):
 
     colored_pixels = []
     frame_count = 0
+    succeeded = 0
     while video_cap.isOpened():
         print(frame_count)
         ret, frame = video_cap.read()
         if not ret:
             break
-        
-        pil_image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        input_tensor = preprocess(pil_image)
-        input_batch = input_tensor.unsqueeze(0)
-        input_batch = input_batch.to(device)
+        if frame_count > 5005:
+            pil_image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+            input_tensor = preprocess(pil_image)
+            input_batch = input_tensor.unsqueeze(0)
+            input_batch = input_batch.to(device)
 
-        with torch.no_grad():
-            output = model(input_batch)[0]
-        softed_output = torch.nn.functional.softmax(output, dim=0)
-        max_values, argmax_indices = softed_output.max(dim=0)
-        max_values = max_values.cpu().numpy()
-        mask = max_values >= 0  # TODO: Check this value.
-        output_predictions = argmax_indices.cpu() * np.long(mask)
-        if torch.sum(output_predictions != 0).item() > 190:
-            segmentation = postprocess_output(output_predictions, (width, height))
+            with torch.no_grad():
+                output = model(input_batch)[0]
+            softed_output = torch.nn.functional.softmax(output, dim=0)
+            max_values, argmax_indices = softed_output.max(dim=0)
+            max_values = max_values.cpu().numpy()
+            mask = max_values >= 0  # TODO: Check this value.
+            output_predictions = argmax_indices.cpu() * np.long(mask)
+            if torch.sum(output_predictions != 0).item() > 190 and (frame_count-5005)/5 > succeeded:
+                segmentation = postprocess_output(output_predictions, (width, height))
 
-            hdf5_file_path = os.path.join(pred_folder_path, f"frame_{frame_count}.h5")
-            with h5py.File(hdf5_file_path, "w") as hdf5_file:
-                hdf5_file.create_dataset("frame", data=pil_image, compression="gzip")
-                hdf5_file.create_dataset("segmentation", data=segmentation, compression="gzip")
+                hdf5_file_path = os.path.join(pred_folder_path, f"frame_{frame_count}.h5")
+                with h5py.File(hdf5_file_path, "w") as hdf5_file:
+                    hdf5_file.create_dataset("frame", data=pil_image, compression="gzip")
+                    hdf5_file.create_dataset("segmentation", data=segmentation, compression="gzip")
+                succeeded += 1
         frame_count += 1
         # if frame_count == 100:
         #     colored_pixels.sort()

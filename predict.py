@@ -5,15 +5,15 @@ import segmentation_models_pytorch as smp
 import matplotlib.pyplot as plt
 import argparse
 import os
-import sys
 
-DEV_OUTPUT_PATH = "./model_developement/output_val/"
-TEST_OUTPUT_PATH = "./domain_adaptation/output_val/"
+DEV_OUTPUT_PATH = "./model_developement/predictions/"
+TEST_OUTPUT_PATH = "./domain_adaptation/predictions/"
+
 
 # Function to predict on a new image
 def predict(image_path, output_dir, model_path):
     os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, os.path.basename(image_path))
+    output_path = os.path.join(output_dir, os.path.basename(image_path).replace("color.jpg", "pred.jpg"))
 
     model = smp.DeepLabV3Plus(
         encoder_name="resnet50",
@@ -51,10 +51,10 @@ def predict(image_path, output_dir, model_path):
     # Find the maximum value along dimension 0 (across the first axis)
     max_values, argmax_indices = softed_output.max(dim=0)
 
-    # Check if the max values are greater than or equal to 0.7
-    mask = max_values >= 0  # TODO: Check this value.
+    # Check if the max values are greater than or equal to threshold
+    mask = max_values >= 0  # Change value if necessary.
 
-    # Set argmax indices to 0 where max value is less than 0.7
+    # Set argmax indices to 0 where max value is less than threshold
     output_predictions = argmax_indices * mask.long()
 
     # Plot the results
@@ -74,9 +74,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--image_idx", type=int,
                         help="Index of the image to predict.\
-                        For example: '-i 0' will predict on the first image.")
-    parser.add_argument("-m", "--model_path", type=str, default="./model_developement/deeplabv3_model_long_tweezers2.pth",
+                        For example: '-i 0' will predict on the first image in the directory: ./data_generation/output/jpg_format/")
+    parser.add_argument("-p", "--image_path", type=str,
+                        help="Path to the image to predict.")
+    
+    parser.add_argument("-m", "--model_path", type=str, default="./model_developement/deeplabv3_model.pth",
                         help="Path to the model file.")
+    
     parser.add_argument("-o", "--output_dir", type=str,
                         help="Path to the directory where the output image will be saved.\n\
                         For example: f{DEV_OUTPUT_PATH}")
@@ -88,12 +92,18 @@ if __name__ == "__main__":
                         This will use the output directory: f{TEST_OUTPUT_PATH}")
     args = parser.parse_args()
 
-    image_path = f"./data_generation/output_objects/hdri_background/jpg_format/{args.image_idx}_color.jpg"
+    if (args.image_idx is None) and (args.image_path is None):
+        raise ValueError("Please provide an image index using the '-i' flag or an image path using the '-p' flag.")
+    if sum([bool(args.image_idx), bool(args.image_path)]) > 1:
+        raise ValueError("Please provide only one of the following: '-i' or '-p'.")
+    
+    image_path = f"./data_generation/output/jpg_format/{args.image_idx}_color.jpg" if args.image_idx else args.image_path
 
     if (args.output_dir is None) and (args.dev is False) and (args.test is False):
         raise ValueError("Please provide an output directory using the '-o' flag, or use the '--dev' or '--test' flag.")
     if sum([bool(args.output_dir), args.dev, args.test]) > 1:
         raise ValueError("Please provide only one of the following: '-o', '--dev', or '--test'.")
+    
     output_dir = args.output_dir if args.output_dir else DEV_OUTPUT_PATH if args.dev else TEST_OUTPUT_PATH
 
     predict(image_path, output_dir, args.model_path)

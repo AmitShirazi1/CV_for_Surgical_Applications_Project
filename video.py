@@ -7,8 +7,8 @@ import numpy as np
 import argparse
 import os
 
-DEV_OUTPUT_PATH = "./model_developement/output/"
-TEST_OUTPUT_PATH = "./domain_adaptation/output/"
+DEV_OUTPUT_PATH = "./model_developement/predictions/"
+TEST_OUTPUT_PATH = "./domain_adaptation/predictions/"
 
 
 def apply_custom_colormap_with_transparency(mask, category_colors):
@@ -101,15 +101,11 @@ def predict_video(video_path, output_dir, model_path):
         max_values, argmax_indices = softed_output.max(dim=0)
         max_values = max_values.cpu().numpy()
 
-        # Step 2: Check if the max values are greater than or equal to 0.7
-        mask = max_values >= 0.5  # TODO: Check this value.
+        # Check if the max values are greater than or equal to threshold
+        mask = max_values >= 0.5  # Change value if necessary.
 
-        # Step 3: Set argmax indices to 0 where max value is less than 0.7
+        # Set argmax indices to 0 where max value is less than threshold
         output_predictions = argmax_indices.cpu() * np.long(mask)
-
-
-        # # Generate segmentation mask (output_predictions is the predicted class map)
-        # output_predictions = output.argmax(0).cpu().numpy()
 
         # Apply custom colormap with transparency
         color_mask = apply_custom_colormap_with_transparency(output_predictions, CATEGORY_COLORS)
@@ -136,13 +132,12 @@ def predict_video(video_path, output_dir, model_path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-v", "--input_video_path", type=str, default="/datashare/HW1/ood_video_data/surg_1.mp4",
+    parser.add_argument("-v", "--input_video_path", type=str, default="/datashare/project/vids_test/4_2_24_A_1.mp4",
                         help="Path to input video.\n\
                         For tunning, choose a file from dir: '/datashare/project/vids_tune/'.\n\
                         For testing, choose a file from dir: '/datashare/project/vids_test/'.")
-    # For trying on a short video: /datashare/HW1/ood_video_data/surg_1.mp4
 
-    parser.add_argument("-m", "--model_path", type=str, default="./model_developement/deeplabv3_model_tuned1.pth",
+    parser.add_argument("-m", "--model_path", type=str, default="./model_developement/deeplabv3_model.pth",
                         help="Path to the model file.")
     
     parser.add_argument("-o", "--output_dir", type=str,
