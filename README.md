@@ -124,7 +124,7 @@ python video.py -o ./output/
 ### Phase 1: Synthetic Data Generation
 1. Generate synthetic images and segmentation masks:
    ```bash
-   blenderproc run ./data_generation/synthetic_data_generator.py -n 1000
+   blenderproc run ./data_generation/synthetic_data_generator.py -b -n 1000
    ```
    Replace `1000` with the desired number of images.
 
