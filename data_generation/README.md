@@ -1,4 +1,4 @@
-Thank you for the feedback! Here's the revised README for Phase 1 with the necessary changes:
+
 # Phase 1 - Synthetic Data Generation
 
 ## Overview
